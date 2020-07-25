@@ -207,7 +207,7 @@ function view_recherche(candidat, sujet) {
       vue_recherche.style.display = "";
       
       get_api("/api/recherche?sujet=" + s.id + "&candidat=" + c.id , function(r) {
-         remplit_sujet(c, s, r);
+         remplit_recherche(c, s, r);
       });
    });
 }
