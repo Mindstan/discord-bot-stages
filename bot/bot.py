@@ -159,7 +159,7 @@ async def update_board(guild):
    
    msg += "Liste des utilisateurs : \n```\n"
    for user in queue:
-      msg += get_nick(user["member"]) + " " + user["category"] + "\t\t\t(" + user["time"].strftime("%Hh%Mm%Ss") + ") \n"
+      msg += get_nick(user["member"]) + " " + user["category"] + "\t\t\t(" + utc_to_local(user["time"]).strftime("%Hh%Mm%Ss") + ") \n"
    msg += "```\n"
    
    await get_channel(guild, 'commandes-bot').purge(limit = 10)
