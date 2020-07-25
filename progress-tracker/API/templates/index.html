@@ -1,0 +1,484 @@
+<html>
+   <head>
+      <style>
+         .popup {
+            z-index:1;
+            position: fixed;
+            bottom: 0px;
+            right: 0px;
+            width: 100%;
+            height: 100%;
+            background-color: white;
+            overflow: scroll;
+         }
+         
+         #menu {
+            height: 10000px;
+         }
+         
+         span {
+            color: blue;
+            text-decoration: underline;
+         }
+         
+         .header {
+            position: sticky;
+            top: 0;
+            background-color: white;
+         }
+      </style>
+   </head>
+   <body>
+      <div id="menu">
+         <ul id="liste_stages">
+         </ul>
+         
+         <div id="liste_tables">
+            
+         </div>
+      </div>
+      
+      <div id="vue_sujet" class="popup" style="display:none;">
+         <div>
+            <h1 id="nom_sujet"></h1>
+            <h2>Image :</h2>
+            <img id="img_sujet" />
+            <h2>Explications :</h2>
+            <p id="explications_sujet"></p>
+            <button id="close_sujet" onclick="close_sujet();">Fermer</button>
+         </div>
+      </div>
+      
+      <div id="vue_recherche" class="popup" style="display:none;">
+         <h1 id="titre_recherche"></h1>
+         
+         <p id="texte_recherche"></p>
+         
+         <button id="demarrer_recherche" onclick="demarrer_recherche();">Démarrer</button>
+         <button id="demarrer_recherche" onclick="lire_recherche();">Lire</button>
+         <button id="demarrer_recherche" onclick="valider_recherche();">Valider</button>
+         
+         <textarea id="commentaires_recherche" style="width:100%;height:300px;"></textarea><br/>
+         
+         <button id="close_recherche" onclick="close_recherche();">Fermer</button>
+      </div>
+      
+      <script>
+const api_token = "{{ api_token }}";
+
+function clip(str) {
+   el = document.createElement('textarea');
+   el.value = str;
+   document.body.appendChild(el);
+   el.select();
+   document.execCommand('copy');
+   document.body.removeChild(el);
+}
+
+function get_api(url, callback) {
+   var xhr = new XMLHttpRequest();
+   xhr.onreadystatechange = function() {
+      if(this.readyState == 4 && this.status == 200 && callback) {
+         callback(JSON.parse(this.responseText));
+      }
+   };
+   xhr.open("GET", url, true);
+   xhr.setRequestHeader("Content-type", "application/json");
+   xhr.setRequestHeader("Authorization", api_token);
+   xhr.send();
+}
+
+function put_api(url, data, callback) {
+   var xhr = new XMLHttpRequest();
+   xhr.open("PUT", url, true);
+   xhr.onreadystatechange = function() {
+      if(this.readyState == 4 && this.status == 200 && callback) {
+         callback(JSON.parse(this.responseText));
+      }
+   };
+   xhr.setRequestHeader("Content-type", "application/json");
+   xhr.setRequestHeader("Authorization", api_token);
+   xhr.send(JSON.stringify(data));
+}
+
+function post_api(url, data, callback) {
+   var xhr = new XMLHttpRequest();
+   xhr.open("POST", url, true);
+   xhr.onreadystatechange = function() {
+      if(this.readyState == 4 && this.status == 201 && callback) {
+         callback(JSON.parse(this.responseText));
+      }
+   };
+   xhr.setRequestHeader("Content-type", "application/json");
+   xhr.setRequestHeader("Authorization", api_token);
+   xhr.send(JSON.stringify(data));
+}
+
+
+function empty(node) {
+   while(node.firstChild) {
+      node.removeChild(node.firstChild);
+   }
+}
+
+function candidat_str(c) {
+   return c.prenom + " (" + c.login + ", " + c.annee_bac + ")";
+}
+
+function texte_temps(premiere_lecture, demarrage_officiel, validation) {
+   return "Première lecture il y a " + premiere_lecture + "<br/>"
+   + "Démarrage officiel il y a " + demarrage_officiel + "<br/>"
+   + "Validation il y a " + validation + "<br/>"
+}
+
+function temps_str(temps) {
+   if(temps === "") return temps;
+   
+   if(temps <= 60) return temps + "m";
+   else if(temps <= 60 * 60) return Math.floor(temps / 60) + "h" + temps % 60 + "m";
+   else return Math.floor(temps / (24 * 60)) + "j" + Math.floor((temps % (24 * 60)) / 60) + "h" + temps % 60 + "m";
+}
+
+function delta(d) {
+   var date = new Date(d);
+   var now = new Date();
+   return Math.round((now.getTime() - date.getTime()) / 60000.0);
+}
+
+var liste_stages = document.getElementById("liste_stages");
+var liste_tables = document.getElementById("liste_tables");
+var vue_sujet = document.getElementById("vue_sujet");
+var menu = document.getElementById("menu");
+var explications = document.getElementById("explications_sujet");
+var nom_sujet = document.getElementById("nom_sujet");
+var img_sujet = document.getElementById("img_sujet");
+var vue_recherche = document.getElementById("vue_recherche");
+var texte_recherche = document.getElementById("texte_recherche");
+var titre_recherche = document.getElementById("titre_recherche");
+var commentaires_recherche = document.getElementById("commentaires_recherche");
+
+var cur_stage = null;
+var cur_stage_url = "";
+
+var cur_args = [];
+
+var cases = {};
+var contenu = {};
+
+var sujets = {};
+
+function view_sujet(lien) {
+   get_api(lien, function(t) {
+      nom_sujet.innerText = t.nom;
+      explications_sujet.innerText = t.explications;
+      img_sujet.src = t.lien;
+      img_sujet.style.width = "800px";
+      
+      vue_sujet.style.display = "";
+   });
+}
+
+function close_sujet() {
+   vue_sujet.style.display = "none";
+}
+
+function remplit_recherche(candidat, sujet, recherche) {
+   commentaires_recherche.value = recherche.commentaires;
+   cur_args = [candidat, sujet, recherche];
+   
+   var premiere_lecture = "", demarrage_officiel = "", validation = "";
+   if(recherche.premiere_lecture) premiere_lecture = delta(recherche.premiere_lecture);
+   if(recherche.demarrage_officiel) demarrage_officiel = delta(recherche.demarrage_officiel);
+   if(recherche.validation) validation = delta(recherche.validation);
+   
+   texte_recherche.innerHTML = texte_temps(temps_str(premiere_lecture), temps_str(demarrage_officiel), temps_str(validation));
+}
+
+function view_recherche(candidat, sujet) {
+   
+   get_api(candidat, function(c) {
+      s = sujets[sujet]
+      titre_recherche.innerText = candidat_str(c) + " / " + s.nom;
+      commentaires_recherche.value = "";
+      texte_recherche.innerHTML = texte_temps("", "", "");
+      cur_args = [c, s];
+      
+      vue_recherche.style.display = "";
+      
+      for(var iRecherche in c.recherche_set) {
+         get_api(c.recherche_set[iRecherche], function(r) {
+               if(r.sujet == sujet && r.candidat == r.candidat) {
+                  remplit_recherche(c, s, r);
+               }
+            }  
+         );
+      }
+   });
+}
+
+function update_recherche() {
+   update_everything();
+   close_recherche();
+   view_recherche(cur_args[0].url, cur_args[1].url);
+}
+
+function demarrer_recherche() {
+   cur_args[0].sujet = cur_args[1].url;
+   put_api(cur_args[0].url, cur_args[0]);
+   
+   if(cur_args.length == 2) {
+      post_api("/api/recherche/", {
+         candidat: cur_args[0].url,
+         sujet: cur_args[1].url,
+         commentaires: commentaires_recherche.value,
+         demarrage_officiel: new Date().toISOString(),
+         premiere_lecture: new Date().toISOString()
+      }, update_recherche);
+   }
+   else {
+      if(!cur_args[2].premiere_lecture) cur_args[2].premiere_lecture = new Date().toISOString();
+      if(!cur_args[2].demarrage_officiel) cur_args[2].demarrage_officiel = new Date().toISOString();
+      cur_args[2].commentaires = commentaires_recherche.value;
+      put_api(cur_args[2].url, cur_args[2], update_recherche);
+   }
+}
+
+function lire_recherche() {
+   if(cur_args.length == 2) {
+      post_api("/api/recherche/", {
+         candidat: cur_args[0].url,
+         sujet: cur_args[1].url,
+         commentaires: commentaires_recherche.value,
+         premiere_lecture: new Date().toISOString()
+      }, update_recherche);
+   }
+   else {
+      if(!cur_args[2].premiere_lecture) cur_args[2].premiere_lecture = new Date().toISOString();
+      cur_args[2].commentaires = commentaires_recherche.value;
+      put_api(cur_args[2].url, cur_args[2], update_recherche);
+   }
+}
+
+function valider_recherche() {
+   if(cur_args.length == 2) {
+      post_api("/api/recherche/", {
+         candidat: cur_args[0].url,
+         sujet: cur_args[1].url,
+         commentaires: commentaires_recherche.value,
+         premiere_lecture: new Date().toISOString(),
+         demarrage_officiel: new Date().toISOString(),
+         validation: new Date().toISOString()
+      }, update_recherche);
+   }
+   else {
+      if(!cur_args[2].premiere_lecture) cur_args[2].premiere_lecture = new Date().toISOString();
+      if(!cur_args[2].demarrage_officiel) cur_args[2].demarrage_officiel = new Date().toISOString();
+      if(!cur_args[2].validation) cur_args[2].validation = new Date().toISOString();
+      cur_args[2].commentaires = commentaires_recherche.value;
+      put_api(cur_args[2].url, cur_args[2], update_recherche);
+   }
+}
+
+
+function close_recherche() {
+   vue_recherche.style.display = "none";
+   
+   if(cur_args.length == 2 && commentaires_recherche.value != "") {
+      post_api("/api/recherche/", {
+         candidat: cur_args[0].url,
+         sujet: cur_args[1].url,
+         commentaires: commentaires_recherche.value
+      });
+   }
+   else if(cur_args.length == 3) {
+      cur_args[2].commentaires = commentaires_recherche.value;
+      put_api(cur_args[2].url, cur_args[2]);
+   }
+}
+
+function remplit(sujet, candidat) {
+   if(cases[sujet] && contenu[sujet] && cases[sujet][candidat] && contenu[sujet][candidat]) {
+      var tr = cases[sujet][candidat];
+      var t = contenu[sujet][candidat];
+      
+      if(t.validation != null) {
+         tr.innerText = "Validé";
+         tr.style.backgroundColor = "rgb(0, 255, 0)";
+      }
+      else if(t.premiere_lecture == null) {
+         tr.innerText = "Non lu";
+      }
+      else if(t.demarrage_officiel == null) {
+         tr.innerText = "Lu";
+         tr.style.backgroundColor = "rgb(0, 0, 255)";
+      }
+      else {
+         var elapsed = delta(t.demarrage_officiel);
+         
+         tr.innerText = "En Cours, ";
+         if(elapsed <= 20) {
+            tr.style.backgroundColor = "rgb(255, 255, 0)";
+         }
+         else if(elapsed <= 40) {
+            tr.style.backgroundColor = "rgb(255, 192, 0)";
+         }
+         else if(elapsed <= 60) {
+            tr.style.backgroundColor = "rgb(255, 128, 0)";
+         }
+         else if(elapsed <= 90) {
+            tr.style.backgroundColor = "rgb(255, 64, 0)";
+         }
+         else {
+            tr.style.backgroundColor = "rgb(255, 0, 0)";
+         }
+         
+         tr.innerText += " " + elapsed + "m";
+      }
+   }
+}
+
+
+
+function create_ligne(tr, lien, parcours) {
+   var th = document.createElement("TD");
+   tr.appendChild(th);
+   
+   cases[lien] = {};
+   
+   for(var iStagiaire in liste_stagiaires) {
+      var td = document.createElement("TD");
+      tr.appendChild(td);
+      
+      var stagaire = liste_stagiaires[iStagiaire];
+      
+      td.onclick = function() {
+         view_recherche(stagaire, lien);
+      };
+      
+      cases[lien][stagaire] = td;
+      
+      remplit(lien, stagaire);
+   }
+   
+   var t = sujets[lien];
+   th.style.textAlign = "left";
+   th.innerHTML = parcours.code + "." + t.ordre + ": <span onclick='view_sujet(\"" + t.url + "\");'>" + t.nom + "</span>, <span href='#' onclick='clip(\""+ t.lien +"\");'>img</span>";
+   
+   if(t.correction != null) {
+      th.innerHTML += ", <span href='#' onclick='clip(\""+ t.correction +"\");'>sol</span>";
+   }
+}
+
+function update_stage() {
+   if(cur_stage == null)
+      return;
+   
+   get_api("/api/stage/" + cur_stage, function(t) {
+      get_api("/api/sujet/", function (s) {
+         for(var iSujet in s) {
+            var sujet = s[iSujet];
+            sujets[s[iSujet].url] = sujet;
+         }
+         
+         empty(liste_tables);
+         liste_stagiaires = t.candidats;
+         
+         cases = {};
+         contenu = {};
+         
+         get_api("/api/parcours/", function(t) {
+            for(var iParcours in t) {
+               var parcours = t[iParcours];
+               
+               var h2 = document.createElement("H2");
+               h2.innerText = parcours.nom;
+               
+               var table = document.createElement("TABLE");
+               
+               liste_tables.appendChild(h2);
+               liste_tables.appendChild(table);
+               
+               var thead = document.createElement("TR");
+               table.appendChild(thead);
+               
+               
+               var th = document.createElement("TH");
+               thead.appendChild(th);
+               
+               for(var iLien in liste_stagiaires) {
+                  var fill = function () {
+                     return function() {
+                        var th = document.createElement("TH");
+                        thead.appendChild(th);
+                        th.classList.add("header");
+                        
+                        get_api(liste_stagiaires[iLien], function(t) {
+                           th.innerText = candidat_str(t);
+                        });
+                     };
+                  }();
+                  
+                  fill();
+               }
+               
+               parcours.sujet_set.sort(function(s1, s2) { return sujets[s1].ordre - sujets[s2].ordre; });
+               
+               for(var iSujet in parcours.sujet_set) {
+                  var tr = document.createElement("TR");
+                  table.appendChild(tr);
+                  
+                  create_ligne(tr, parcours.sujet_set[iSujet], parcours);
+               }
+            }
+         });
+         
+         get_api("/api/recherche/", function(t) {
+            for(var iRecherche in t) {
+               var recherche = t[iRecherche];
+               
+               var candidat = recherche.candidat;
+               var sujet = recherche.sujet;
+               
+               if(!contenu[sujet])
+                  contenu[sujet] = {};
+               
+               contenu[sujet][candidat] = t[iRecherche];
+               remplit(sujet, candidat);
+            }
+         });
+      });
+   });
+}
+
+function update_everything() {
+   get_api("/api/stage/", function(t) {
+      empty(liste_stages);
+      
+      for(var iStage in t) {
+         var stage = t[iStage];
+         
+         var li = document.createElement("LI");
+         li.innerText = stage.nom;
+         li.onclick = function(s) {
+            return function() { cur_stage = s.id; cur_stage_url = s.url; update_stage(); };
+         }(stage);
+         
+         liste_stages.appendChild(li);
+      }
+   });
+   
+   update_stage();
+}
+
+function auto_update() {
+   update_everything();
+   
+   setTimeout(function() {
+      auto_update();
+   }, 60 * 1000);
+}
+
+auto_update();
+      </script>
+   </body>
+</html>

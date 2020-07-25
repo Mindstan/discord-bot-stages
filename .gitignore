@@ -1,1 +1,2 @@
-.env
+bot/.env
+progress-tracker/env-vars
