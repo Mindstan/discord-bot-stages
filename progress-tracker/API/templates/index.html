@@ -54,9 +54,10 @@
          
          <p id="texte_recherche"></p>
          
-         <button id="demarrer_recherche" onclick="demarrer_recherche();">Démarrer</button>
-         <button id="demarrer_recherche" onclick="lire_recherche();">Lire</button>
-         <button id="demarrer_recherche" onclick="valider_recherche();">Valider</button>
+         <button onclick="demarrer_recherche();">Démarrer</button>
+         <button onclick="lire_recherche();">Lire</button>
+         <button onclick="valider_recherche();">Valider</button>
+         <button onclick="devalider_recherche();">Dévalider</button>
          
          <textarea id="commentaires_recherche" style="width:100%;height:300px;"></textarea><br/>
          
@@ -279,6 +280,13 @@ function valider_recherche() {
    }
 }
 
+function devalider_recherche() {
+   if(cur_args.length >= 2) {
+      cur_args[2].validation = null;
+      cur_args[2].commentaires = commentaires_recherche.value;
+      put_api(cur_args[2].url, cur_args[2], update_recherche);
+   }
+}
 
 function close_recherche() {
    vue_recherche.style.display = "none";
