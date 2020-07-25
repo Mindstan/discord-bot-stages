@@ -14,7 +14,7 @@ class SujetSerializer(serializers.HyperlinkedModelSerializer):
 class CandidatSerializer(serializers.HyperlinkedModelSerializer):
    class Meta:
       model = Candidat
-      fields = ["id", "prenom", "nom", "annee_bac", "login", "discord_name", "sujet", "recherche_set", "stage_set", "url"]
+      fields = ["id", "prenom", "nom", "annee_bac", "login", "discord_name", "sujet", "url"]
 
 class RechercheSerializer(serializers.HyperlinkedModelSerializer):
    class Meta:
