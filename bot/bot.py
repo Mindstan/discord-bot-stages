@@ -5,6 +5,13 @@ import requests
 import json
 from datetime import datetime
 from dotenv import load_dotenv
+import pytz
+
+local_tz = pytz.timezone('Europe/Paris')
+
+def utc_to_local(utc_dt):
+    local_dt = utc_dt.replace(tzinfo=pytz.utc).astimezone(local_tz)
+    return local_tz.normalize(local_dt)
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -137,11 +144,11 @@ async def update_board(guild):
          for user in get_channel(guild, 'couloir-' + category_name).members:
             obj = get_object(user)
             if obj == None:
-               nqueue.append({"member":user, "category":category_name, "time":datetime.now()})
+               nqueue.append({"member":user, "category":category_name, "time":datetime.utcnow()})
                
                user_channel = get_user_channel(user)
                if user_channel != None:
-                  await user_channel.send(get_nick(user) + " a rejoint le couloir (" + datetime.now().strftime("%Hh%Mm%Ss") + ")\n N'oubliez pas de mettre un message dans votre salon perso disant ce que vous attendez (soumission, aide sur un sujet, etc.)")
+                  await user_channel.send(get_nick(user) + " a rejoint le couloir (" + utc_to_local(datetime.utcnow()).strftime("%Hh%Mm%Ss") + ")\n N'oubliez pas de mettre un message dans votre salon perso disant ce que vous attendez (soumission, aide sur un sujet, etc.)")
             else:
                nqueue.append({"member":user, "category":category_name, "time": obj["time"]})
    
@@ -187,7 +194,7 @@ async def on_message(message):
       if user != None:
          user_channel = get_user_channel(user)
          if user_channel != None:
-            await user_channel.send(get_nick(user) + " a discuté avec " + get_nick(message.author) + " (" + datetime.now().strftime("%Hh%Mm%Ss") + ")")
+            await user_channel.send(get_nick(user) + " a discuté avec " + get_nick(message.author) + " (" + utc_to_local(datetime.utcnow()).strftime("%Hh%Mm%Ss") + ")")
          await move_to(user, message.author.voice.channel)
    
    elif len(words) != 0 and words[0] == '!maj':
