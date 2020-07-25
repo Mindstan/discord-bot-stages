@@ -351,9 +351,10 @@ function create_ligne(tr, lien, parcours) {
       
       var stagaire = liste_stagiaires[iStagiaire];
       
-      td.onclick = function() {
-         view_recherche(stagaire, lien);
-      };
+      td.onclick = function(s, l) { return function() {
+            view_recherche(stagaire, lien);
+         };
+      }(stagiaire, lien);
       
       cases[lien][stagaire] = td;
       
