@@ -206,14 +206,9 @@ function view_recherche(candidat, sujet) {
       
       vue_recherche.style.display = "";
       
-      for(var iRecherche in c.recherche_set) {
-         get_api(c.recherche_set[iRecherche], function(r) {
-               if(r.sujet == sujet && r.candidat == r.candidat) {
-                  remplit_recherche(c, s, r);
-               }
-            }  
-         );
-      }
+      get_api("/api/recherche?sujet=" + sujet.id + "&candidat=" + candidat.id , function(r) {
+         remplit_sujet(c, s, r);
+      });
    });
 }
 
@@ -357,16 +352,16 @@ function create_ligne(tr, lien, parcours) {
       var td = document.createElement("TD");
       tr.appendChild(td);
       
-      var stagaire = liste_stagiaires[iStagiaire];
+      var stagiaire = liste_stagiaires[iStagiaire];
       
       td.onclick = function(s, l) { return function() {
             view_recherche(s, l);
          };
       }(stagiaire, lien);
       
-      cases[lien][stagaire] = td;
+      cases[lien][stagiaire] = td;
       
-      remplit(lien, stagaire);
+      remplit(lien, stagiaire);
    }
    
    var t = sujets[lien];
