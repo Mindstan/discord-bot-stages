@@ -205,7 +205,7 @@ async def on_message(message):
       if not est_entraineur(message.author):
          return
       await message.channel.purge(limit = 1)
-      await say(words[1], message.content[(7 + len(words[1])):], message.channel.guild)
+      await say(words[1], get_nick(message.author) + " : " + message.content[(7 + len(words[1])):], message.channel.guild)
    
    elif len(words) >= 1 and words[0] == "!sujet":
       if message.channel.name.startswith("salon-"):
