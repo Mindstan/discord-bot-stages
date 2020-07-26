@@ -253,8 +253,8 @@ async def on_message(message):
                put_api(recherche['url'], recherche)
             
             await message.channel.send("Sujet validé !")
-            if sujet['solution'] != None and sujet['solution'] != "":
-               await message.channel.send(sujet['solution'])
+            if sujet['correction'] != None and sujet['correction'] != "":
+               await message.channel.send(sujet['correction'])
    
    elif len(words) >= 2 and words[0] == "!donner":
       if not est_entraineur(message.author):
