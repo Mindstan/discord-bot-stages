@@ -7,4 +7,4 @@ RUN pip install -r requirements.txt
 
 EXPOSE 80:80
 
-CMD ["gunicorn", "-b", "0.0.0.0:80", "Progression.wsgi:application"]
+CMD ["/bin/sh", "start.sh"]
