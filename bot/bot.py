@@ -252,7 +252,8 @@ async def on_message(message):
                recherche['validation'] = datetime.utcnow().isoformat()
                put_api(recherche['url'], recherche)
             
-            await message.channel.send("Sujet validé !")
+            parcours = get_api(sujet['parcours'])
+            await message.channel.send("Sujet " + parcours['code'] + "." + str(sujet['ordre']) + ") " + sujet['nom'] + " validé par " + get_nick(message.author))
             if sujet['correction'] != None and sujet['correction'] != "":
                await message.channel.send(sujet['correction'])
    
