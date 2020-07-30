@@ -36,6 +36,10 @@ class Recherche(models.Model):
    premiere_lecture = models.DateTimeField(null=True, blank=True)
    demarrage_officiel = models.DateTimeField(null=True, blank=True)
    validation = models.DateTimeField(null=True, blank=True)
+   
+   debut_pause = models.DateTimeField(null=True, blank=True)
+   faux_debut = models.DateTimeField(null=True, blank=True)
+   
    commentaires = models.TextField(null=True, blank=True)
    
    def __str__(self):
