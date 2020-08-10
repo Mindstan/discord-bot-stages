@@ -9,8 +9,10 @@ Bot Discord pour les stages
 * Python 3.5 or higher
 * python-dotenv
 * discord.py
+* requests
+* pytz
 
-The Python modules can be installed with `pip install python-dotenv discord.py` if you have pip installed.
+The Python modules can be installed with `pip install python-dotenv discord.py requests pytz` if you have pip installed.
 
 ### To run the API
 
@@ -22,7 +24,7 @@ The Python modules can be installed with `pip install python-dotenv discord.py` 
 
 The bot needs a bot token from Discord. Once obtained, create a `.env` file containing the following line :
 ```
-API_URL=[URL to progress-tracker]
+API_URL=[URL to progress-tracker (ex : http://website.com)]
 API_TOKEN=TOKEN [token for progress-tracker]
 DISCORD_TOKEN=[your token]
 ```
