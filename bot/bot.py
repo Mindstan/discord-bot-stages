@@ -82,6 +82,12 @@ def get_code(code):
 
 #################### DISCORD UTILS ####################
 
+def est_invisile(user): # Non notifé par le bot
+   for role in user.roles:
+      if role.name == "Invisible":
+         return True
+   return False
+
 def est_entraineur(user):
    for role in user.roles:
       if role.name == "Entraîneur":
@@ -98,6 +104,12 @@ def get_nick(member):
    if member.nick == None:
       return str(member)
    return member.nick
+
+def get_role_members(guild, name):
+   for role in guild.roles:
+      if role.name == name:
+         return role.members
+   return []
    
 def get_user_channel(member):
    for role in member.roles:
@@ -137,7 +149,7 @@ async def update_board(guild):
                   queue.append({
                      "member": user,
                      "category": category_name,
-                     "time":datetime.utcnow()
+                     "time": datetime.utcnow()
                   })
                   
                   user_channel = get_user_channel(user)
@@ -158,13 +170,13 @@ async def update_board(guild):
    queue.sort(key=lambda user: user["time"])
    
    msg = ("Commandes : \n"
-      "```!candidat [Nom_Du_Groupe | Nom_Du_Candidat] (ex : !candidat arthur-l)\n"
+      "```"
+      "!candidat [Nom_Du_Groupe | Nom_Du_Candidat] (ex : !candidat arthur-l)\n"
       "!maj\n"
       "!dire Nom_Du_Groupe Message\n"
       "!sujet [suivant]\n"
-      "!sujet suivant\n"
-      "!nettoie [nb_lines]\n"
-      "!valider [suivant]\n"
+      "!nettoie [nb_lignes]\n"
+      "!valider [suivant | Id_Du_Sujet]\n"
       "!donner [suivant | Id_Du_Sujet]  (ex : !donner G.10)\n"
       "```\n\n"
    
@@ -179,8 +191,53 @@ async def update_board(guild):
 
    msg = msg.format(user_list=''.join(user_list))
    
-   await get_channel(guild, 'commandes-bot').purge(limit = 10)
+   await get_channel(guild, 'commandes-bot').purge(limit = 20)
    await get_channel(guild, 'commandes-bot').send(msg)
+
+async def notify_trainers(): # Won't work with mutliple servers
+   await client.wait_until_ready()
+   SLEEP_TIME = 30
+   NOTIFY_INTERVAL = 120
+   NOTIFY_DELAY = 120
+
+   last_notification = datetime.min
+   last_notif_msg = None
+
+   while not client.is_closed():
+      users_waiting = False
+      if queue == []:
+         last_notification = datetime.min
+
+      # Check if some users are in the queue since 
+      for users in queue:
+         delta_delay = (datetime.utcnow() - users['time']).total_seconds()
+         delta_interval = (datetime.utcnow() - last_notification).total_seconds()
+
+         if delta_delay > NOTIFY_DELAY and delta_interval > NOTIFY_INTERVAL:
+            last_notification = datetime.utcnow()
+            users_waiting = True
+            break
+      if users_waiting:
+         for guild in client.guilds:
+            trainers = get_role_members(guild, "Entraîneur")
+            available_trainers = []
+
+            for trainer in trainers:
+               # Si l'entraineur est seul dans un salon audio ET n'a pas le rôle "invisible", il sera notifé
+               if trainer.voice and not est_invisile(trainer) and len(trainer.voice.channel.members) == 1:
+                  available_trainers.append(trainer)
+
+            if available_trainers:
+               mentions = [user.mention for user in available_trainers]
+               msg = ' '.join(mentions)
+               if last_notif_msg:
+                  try:
+                     await last_notif_msg.delete()
+                  except discord.errors.NotFound:
+                     pass
+               last_notif_msg = await get_channel(guild, 'commandes-bot').send(msg)
+
+      await asyncio.sleep(SLEEP_TIME)
 
 #################### COMMANDS ####################
 
@@ -198,9 +255,9 @@ async def cmd_candidat(message, username=None, *args):
    elif username == username.upper(): # caps : category
       user = get_first_user_of_category(username)
    else:
-      for role in message.guild.roles:
-         if role.name == "u-" + username:
-            user = role.members[0]
+      members = get_role_members(message.guild, "u-" + username)
+      if members:
+         user = members[0]
       
    if user is not None:
       user_channel = get_user_channel(user)
@@ -236,14 +293,15 @@ async def cmd_sujet(message, sujet_suivant=None, *args):
    user = get_user(message.channel.name[6:])
    
    if user != None and user['sujet'] != None:
-      sujet = get_api(user['sujet'])
-      
       if sujet_suivant == "suivant":
          sujet = get_suivant(sujet)
          
          if sujet == None:
-             await message.channel.send("Pas de sujet suivant dans ce parcours")
-             return
+            return await message.channel.send("Pas de sujet suivant dans ce parcours")
+      else:
+         sujet = get_api(user['sujet'])
+         if sujet == None:
+            return await message.channel.send("Pas de sujet en cours")
       
       lien = sujet['lien']
       await message.channel.send(str(lien))
@@ -266,10 +324,18 @@ async def cmd_valider(message, arg_suivant=None, *args):
    if user['sujet'] is None:
       return await message.channel.send("Pas de sujet en cours")
    
-   sujet = get_api(user['sujet'])
-   
    if arg_suivant == "suivant":
       sujet = get_suivant(sujet)
+      if sujet is None:
+         return await message.channel.send("Pas de sujet suivant")
+   elif arg_suivant is not None:
+      sujet = get_api(arg_suivant)
+      if sujet is None:
+         return await message.channel.send("Sujet '{}' inconnu".format(arg_suivant))
+   else:
+      sujet = get_api(user['sujet'])
+      if sujet is None:
+         return await message.channel.send("Pas de sujet en cours")
    
    print(sujet)
    
@@ -386,4 +452,5 @@ async def on_voice_state_update(member, before, after):
    elif after.channel != None and after.channel.name.startswith("couloir"):
       await update_board(member.guild)
    
+client.loop.create_task(notify_trainers())
 client.run(TOKEN)
