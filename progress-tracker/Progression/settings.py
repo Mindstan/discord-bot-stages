@@ -95,12 +95,11 @@ WSGI_APPLICATION = 'Progression.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'progress_tracker',
-        'USER': 'progress_tracker',
-        'PASSWORD': 'gkP6XG6L5hIeNgiy',
-        'HOST': 'franceioi.cinniket56wn.eu-central-1.rds.amazonaws.com',
+        'NAME': os.getenv('DB_NAME', 'progress_tracker'),
+        'USER': os.getenv('DB_USER', 'progress_tracker'),
+        'PASSWORD': os.getenv('DB_PASS', ''),
+        'HOST': os.getenv('DB_HOST', ''),
         'PORT': '',
-        #'ENGINE': 'django.db.backends.mysql',
         #'OPTIONS': {
         #    'read_default_file': '/etc/mysql/my.cnf',
         #}

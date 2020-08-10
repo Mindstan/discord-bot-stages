@@ -37,4 +37,8 @@ Create a file `env-vars` containing :
 API_TOKEN=TOKEN [token for the API]
 DJANGO_SECRET_KEY=[Django secret key]
 INDEX_USERPASS=[username for the index page]:[password for the index page]
+DB_NAME=[database name, default 'progress_tracker']
+DB_USER=[database user, default 'progress_tracker']
+DB_PASS=[database pass]
+DB_HOST=[database host]
 ```
