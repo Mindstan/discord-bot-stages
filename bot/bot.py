@@ -3,7 +3,6 @@ import traceback
 import asyncio
 import discord
 import aiohttp
-import json
 from datetime import datetime
 from dotenv import load_dotenv
 import pytz
@@ -56,6 +55,8 @@ async def get_user_api(name):
    return None
 
 async def get_recherche_api(candidat, sujet):
+   if sujet is None:
+      return None
    recherches = await get_api(API_URL + "/api/recherche?sujet=" + str(sujet['id']) + "&candidat=" + str(candidat['id']))
    
    if len(recherches) >= 1:
@@ -68,6 +69,8 @@ async def get_recherche_api(candidat, sujet):
    return nouv
    
 async def get_suivant_api(sujet):
+   if sujet is None:
+      return None
    sujets = await get_api(API_URL + "/api/sujet/")
    
    for nouv in sujets:
@@ -132,6 +135,31 @@ def get_first_user_of_category(category):
       if user["category"] == category or category == '':
          return user["member"]  
    return None
+
+async def get_sujet_of_msg(sujet_name, message, user):
+   if user is None:
+      return await message.channel.send("Utilisateur non trouvé")
+   if user['sujet'] is None:
+      return await message.channel.send("Pas de sujet en cours")
+
+   if sujet_name == "suivant":
+      sujet = await get_api(user['sujet'])
+      sujet = await get_suivant_api(sujet)
+      if sujet is None:
+         await message.channel.send("Pas de sujet suivant dans ce parcours")
+         return None
+   elif sujet_name is not None:
+      sujet_code = await get_code_api(sujet_name)
+      if sujet_code is None:
+         await message.channel.send("Sujet '{}' inconnu".format(sujet_name))
+         return None
+      sujet = await get_api(sujet_code['url'])
+   else:
+      sujet = await get_api(user['sujet'])
+      if sujet is None:
+         await message.channel.send("Pas de sujet en cours")
+         return None
+   return sujet
 
 #################### CLIENT ACTIONS ####################
    
@@ -301,52 +329,27 @@ async def cmd_sujet(message, sujet_suivant=None, *args):
       return await message.channel.send("Cette commande ne peut pas être utilisée dans ce canal")
 
    user = await get_user_api(message.channel.name[6:])
+   sujet = await get_sujet_of_msg(sujet_suivant, message, user)
+   if sujet is None:
+      return None
    
-   if user != None and user['sujet'] != None:
-      if sujet_suivant == "suivant":
-         sujet = await get_suivant_api(sujet)
-         
-         if sujet == None:
-            return await message.channel.send("Pas de sujet suivant dans ce parcours")
-      else:
-         sujet = await get_api(user['sujet'])
-         if sujet == None:
-            return await message.channel.send("Pas de sujet en cours")
-      
-      lien = sujet['lien']
-      await message.channel.send(str(lien))
-      
-      recherche = await get_recherche_api(user, sujet)
-      if recherche['premiere_lecture'] == None:
-         recherche['premiere_lecture'] = datetime.utcnow().isoformat()
-         await put_api(recherche['url'], recherche)
-      return True
-   else:
-      return await message.channel.send("Utilisateur invalide")
+   lien = sujet['lien']
+   await message.channel.send(str(lien))
+   
+   recherche = await get_recherche_api(user, sujet)
+   if recherche['premiere_lecture'] == None:
+      recherche['premiere_lecture'] = datetime.utcnow().isoformat()
+      await put_api(recherche['url'], recherche)
+   return True
 
 async def cmd_valider(message, arg_suivant=None, *args):
    if not message.channel.name.startswith("salon-"):
       return await message.channel.send("Cette commande ne peut pas être utilisée dans ce canal")
    user = await get_user_api(message.channel.name[6:])
 
-   if user is None:
-      return await message.channel.send("Utilisateur non trouvé")
-   if user['sujet'] is None:
-      return await message.channel.send("Pas de sujet en cours")
-   
-   if arg_suivant == "suivant":
-      sujet = await get_suivant_api(sujet)
-      if sujet is None:
-         return await message.channel.send("Pas de sujet suivant")
-   elif arg_suivant is not None:
-      sujet_code = await get_code_api(arg_suivant)
-      if sujet_code is None:
-         return await message.channel.send("Sujet '{}' inconnu".format(arg_suivant))
-      sujet = await get_api(sujet_code['url'])
-   else:
-      sujet = await get_api(user['sujet'])
-      if sujet is None:
-         return await message.channel.send("Pas de sujet en cours")
+   sujet = await get_sujet_of_msg(arg_suivant, message, user)
+   if sujet is None:
+      return None
       
    recherche = await get_recherche_api(user, sujet)
    if recherche['validation'] == None:
