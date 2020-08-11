@@ -1,11 +1,21 @@
 import os
+import traceback
 import asyncio
 import discord
-import requests
+import aiohttp
 import json
 from datetime import datetime
 from dotenv import load_dotenv
 import pytz
+
+class BotClient(discord.Client):   
+   async def connect(self, *args, **kwargs):
+      self.api_session = aiohttp.ClientSession()
+      await super().connect(*args, **kwargs)
+
+   async def close(self):
+      await super().close()
+      await self.api_session.close()
 
 local_tz = pytz.timezone('Europe/Paris')
 
@@ -18,45 +28,47 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 API_URL = os.getenv('API_URL')
 API_TOKEN = os.getenv('API_TOKEN', '')
 
-client = discord.Client()
-
+client = BotClient()
 queue = []
 
-#API UTILS
-def get_api(url):
-   xhr = requests.get(url, headers={"Authorization": API_TOKEN,"Content-type": "application/json"})
-   return json.loads(xhr.content.decode('utf-8'))
+#################### API ####################
 
-def put_api(url, data):
-   xhr = requests.put(url, headers={"Authorization": API_TOKEN,"Content-type": "application/json"}, data=json.dumps(data))
-   return json.loads(xhr.content.decode('utf-8'))
+API_HEADERS = {"Authorization": API_TOKEN, "Content-type": "application/json"}
 
-def post_api(url, data):
-   xhr = requests.post(url, headers={"Authorization": API_TOKEN,"Content-type": "application/json"}, data=json.dumps(data))
-   return json.loads(xhr.content.decode('utf-8'))
+async def get_api(url):
+   async with client.api_session.get(url, headers=API_HEADERS) as resp:
+      return await resp.json()
 
-def get_user(name):
-   users = get_api(API_URL + "/api/candidat/")
+async def put_api(url, data):
+   async with client.api_session.put(url, headers=API_HEADERS, json=data) as resp:
+      return await resp.json()
+
+async def post_api(url, data):
+   async with client.api_session.post(url, headers=API_HEADERS, json=data) as resp:
+      return await resp.json()
+
+async def get_user_api(name):
+   users = await get_api(API_URL + "/api/candidat/")
    
    for user in users:
       if user['discord_name'] == name:
          return user
    return None
 
-def get_recherche(candidat, sujet):
-   recherches = get_api(API_URL + "/api/recherche?sujet=" + str(sujet['id']) + "&candidat=" + str(candidat['id']))
+async def get_recherche_api(candidat, sujet):
+   recherches = await get_api(API_URL + "/api/recherche?sujet=" + str(sujet['id']) + "&candidat=" + str(candidat['id']))
    
    if len(recherches) >= 1:
       return recherches[0]
    
-   nouv = post_api(API_URL + "/api/recherche/", {
+   nouv = await post_api(API_URL + "/api/recherche/", {
       "candidat": candidat['url'],
       "sujet": sujet['url']
    })
    return nouv
    
-def get_suivant(sujet):
-   sujets = get_api(API_URL + "/api/sujet/")
+async def get_suivant_api(sujet):
+   sujets = await get_api(API_URL + "/api/sujet/")
    
    for nouv in sujets:
       if nouv['parcours'] == sujet['parcours'] and nouv['ordre'] == sujet['ordre'] + 1:
@@ -64,9 +76,9 @@ def get_suivant(sujet):
    
    return None
 
-def get_code(code):
-   sujets = get_api(API_URL + "/api/sujet/")
-   parcours = get_api(API_URL + "/api/parcours/")
+async def get_code_api(code):
+   sujets = await get_api(API_URL + "/api/sujet/")
+   parcours = await get_api(API_URL + "/api/parcours/")
    
    p = {}
    for parcour in parcours:
@@ -78,22 +90,19 @@ def get_code(code):
    
    return None
 
-#DISCORD UTILS
+#################### DISCORD UTILS ####################
+
+def est_invisile(user): # Non notifé par le bot
+   for role in user.roles:
+      if role.name == "Invisible":
+         return True
+   return False
+
 def est_entraineur(user):
    for role in user.roles:
       if role.name == "Entraîneur":
          return True
    return False
-
-async def move_to(user, channel):
-   if user != None:
-      await user.move_to(channel)
-
-def get_object(user):
-   global queue
-   for member in queue:
-      if str(member["member"]) == str(user):
-         return member
 
 def get_channel(guild, name):
    for channel in guild.channels:
@@ -105,6 +114,12 @@ def get_nick(member):
    if member.nick == None:
       return str(member)
    return member.nick
+
+def get_role_members(guild, name):
+   for role in guild.roles:
+      if role.name == name:
+         return role.members
+   return []
    
 def get_user_channel(member):
    for role in member.roles:
@@ -112,191 +127,332 @@ def get_user_channel(member):
          return get_channel(member.guild, 'salon-' + role.name[2:])
    return None
 
-def get_category(category):
+def get_first_user_of_category(category):
    for user in queue:
       if user["category"] == category or category == '':
          return user["member"]  
    return None
 
+#################### CLIENT ACTIONS ####################
+   
+async def say_to_group(target, message, guild):
+   for category in guild.categories:
+      if category.name == "GROUPE-" + target:  
+         for channel in category.channels:
+            if channel.name.startswith("salon-"):
+               await channel.send(message)
+         return True
 
+async def update_board(guild):
+   members_in_queue = {str(user['member']) : user for user in queue}
+   queue.clear()
 
+   for category in guild.categories:
+      if category.name.startswith("GROUPE-"):
+         category_name = category.name[7:]
+         couloir = get_channel(guild, 'couloir-' + category_name)
 
+         if couloir:
+            for user in couloir.members:
+               old_user = members_in_queue.get(str(user), None)
+               if old_user is None:
+                  queue.append({
+                     "member": user,
+                     "category": category_name,
+                     "time": datetime.utcnow()
+                  })
+                  
+                  user_channel = get_user_channel(user)
+                  if user_channel != None:
+                     await user_channel.send(
+                        ("{nick} a rejoint le couloir ({at_time})\n"
+                        "N'oubliez pas de mettre un message dans votre salon perso disant ce que vous attendez (soumission, aide sur un sujet, etc.)").format(
+                           nick=get_nick(user),
+                           at_time=utc_to_local(datetime.utcnow()).strftime("%Hh%Mm%Ss")
+                        ))
+               else:
+                  queue.append({
+                     "member": user,
+                     "category": category_name,
+                     "time": old_user["time"]
+                  })
+   
+   queue.sort(key=lambda user: user["time"])
+   
+   msg = ("Commandes : \n"
+      "```"
+      "!candidat [Nom_Du_Groupe | Nom_Du_Candidat] (ex : !candidat arthur-l)\n"
+      "!maj\n"
+      "!dire Nom_Du_Groupe Message\n"
+      "!sujet [suivant]\n"
+      "!nettoie [nb_lignes]\n"
+      "!valider [suivant | Id_Du_Sujet]\n"
+      "!donner [suivant | Id_Du_Sujet]  (ex : !donner G.10)\n"
+      "```\n\n"
+   
+      "Liste des utilisateurs : \n"
+      "```\n{user_list}```\n")
+
+   user_list = ["{nick} {category}\t\t\t({time})\n".format(
+         nick=get_nick(user["member"]),
+         category=user["category"],
+         time=utc_to_local(user["time"]).strftime("%Hh%Mm%Ss"),
+      ) for user in queue]
+
+   msg = msg.format(user_list=''.join(user_list))
+   
+   await get_channel(guild, 'commandes-bot').purge(limit = 20)
+   await get_channel(guild, 'commandes-bot').send(msg)
+
+async def notify_trainers(): # Won't work with mutliple servers
+   await client.wait_until_ready()
+   SLEEP_TIME = 30
+   NOTIFY_INTERVAL = 120
+   NOTIFY_DELAY = 120
+
+   last_notification = datetime.min
+   last_notif_msg = None
+
+   while not client.is_closed():
+      users_waiting = False
+      if queue == []:
+         last_notification = datetime.min
+
+      # Check if some users are in the queue since 
+      for users in queue:
+         delta_delay = (datetime.utcnow() - users['time']).total_seconds()
+         delta_interval = (datetime.utcnow() - last_notification).total_seconds()
+
+         if delta_delay > NOTIFY_DELAY and delta_interval > NOTIFY_INTERVAL:
+            last_notification = datetime.utcnow()
+            users_waiting = True
+            break
+      if users_waiting:
+         for guild in client.guilds:
+            trainers = get_role_members(guild, "Entraîneur")
+            available_trainers = []
+
+            for trainer in trainers:
+               # Si l'entraineur est seul dans un salon audio ET n'a pas le rôle "invisible", il sera notifé
+               if trainer.voice and not est_invisile(trainer) and len(trainer.voice.channel.members) == 1:
+                  available_trainers.append(trainer)
+
+            if available_trainers:
+               mentions = [user.mention for user in available_trainers]
+               msg = ' '.join(mentions)
+               if last_notif_msg:
+                  try:
+                     await last_notif_msg.delete()
+                  except discord.errors.NotFound:
+                     pass
+               last_notif_msg = await get_channel(guild, 'commandes-bot').send(msg)
+
+      await asyncio.sleep(SLEEP_TIME)
+
+#################### COMMANDS ####################
+
+async def cmd_candidat(message, username=None, *args):
+   if message.author.voice == None:
+      await message.channel.send("Vous n'êtes pas dans un salon audio")
+      return
+   
+   user = None
+   
+   if username is None:
+      user = get_first_user_of_category('')
+   elif username.startswith('<@!') and message.mentions: # Mention
+      user = message.mentions[0]
+   elif username == username.upper(): # caps : category
+      user = get_first_user_of_category(username)
+   else:
+      members = get_role_members(message.guild, "u-" + username)
+      if members:
+         user = members[0]
+      
+   if user is not None:
+      user_channel = get_user_channel(user)
+      if user_channel is not None:
+         await user_channel.send("{user} a discuté avec {author} ({time})".format(
+               user=get_nick(user),
+               author=get_nick(message.author),
+               time=utc_to_local(datetime.utcnow()).strftime("%Hh%Mm%Ss"),
+            ))
+      await user.move_to(message.author.voice.channel)
+      return True
+   elif username:
+      await message.channel.send("Impossible de trouver l'utilisateur {}".format(username))
+
+async def cmd_maj(message, *args):
+   await update_board(message.channel.guild)
+   return True
+
+async def cmd_dire(message, group_name='', *args):
+   msg_text = "{author} : {message}".format(
+      author = get_nick(message.author),
+      message = ' '.join(message.content.split(maxsplit=2)[2:]),
+   )
+   sended = await say_to_group(group_name, msg_text, message.channel.guild)
+   if not sended:
+      await message.channel.send("Groupe GROUPE-{} non toruvé".format(group_name))
+   return sended
+
+async def cmd_sujet(message, sujet_suivant=None, *args):
+   if not message.channel.name.startswith("salon-"):
+      return await message.channel.send("Cette commande ne peut pas être utilisée dans ce canal")
+
+   user = await get_user_api(message.channel.name[6:])
+   
+   if user != None and user['sujet'] != None:
+      if sujet_suivant == "suivant":
+         sujet = await get_suivant_api(sujet)
+         
+         if sujet == None:
+            return await message.channel.send("Pas de sujet suivant dans ce parcours")
+      else:
+         sujet = await get_api(user['sujet'])
+         if sujet == None:
+            return await message.channel.send("Pas de sujet en cours")
+      
+      lien = sujet['lien']
+      await message.channel.send(str(lien))
+      
+      recherche = await get_recherche_api(user, sujet)
+      if recherche['premiere_lecture'] == None:
+         recherche['premiere_lecture'] = datetime.utcnow().isoformat()
+         await put_api(recherche['url'], recherche)
+      return True
+   else:
+      return await message.channel.send("Utilisateur invalide")
+
+async def cmd_valider(message, arg_suivant=None, *args):
+   if not message.channel.name.startswith("salon-"):
+      return await message.channel.send("Cette commande ne peut pas être utilisée dans ce canal")
+   user = await get_user_api(message.channel.name[6:])
+
+   if user is None:
+      return await message.channel.send("Utilisateur non trouvé")
+   if user['sujet'] is None:
+      return await message.channel.send("Pas de sujet en cours")
+   
+   if arg_suivant == "suivant":
+      sujet = await get_suivant_api(sujet)
+      if sujet is None:
+         return await message.channel.send("Pas de sujet suivant")
+   elif arg_suivant is not None:
+      sujet_code = await get_code_api(arg_suivant)
+      if sujet_code is None:
+         return await message.channel.send("Sujet '{}' inconnu".format(arg_suivant))
+      sujet = await get_api(sujet_code['url'])
+   else:
+      sujet = await get_api(user['sujet'])
+      if sujet is None:
+         return await message.channel.send("Pas de sujet en cours")
+      
+   recherche = await get_recherche_api(user, sujet)
+   if recherche['validation'] == None:
+      recherche['validation'] = datetime.utcnow().isoformat()
+      await put_api(recherche['url'], recherche)
+   
+   parcours = await get_api(sujet['parcours'])
+   await message.channel.send("Sujet " + parcours['code'] + "." + str(sujet['ordre']) + ") " + sujet['nom'] + " validé par " + get_nick(message.author))
+   if sujet['correction'] != None and sujet['correction'] != "":
+      await message.channel.send(sujet['correction'])
+   return True
+
+async def cmd_donner(message, sujet_nom=None, *args):
+   if sujet_nom is None:
+      return await message.channel.send("Cette commande nécessite de donner le nom du sujet")
+   if not message.channel.name.startswith("salon-"):
+      return await message.channel.send("Cette commande ne peut être utilisée dans ce canal")
+
+   user = await get_user_api(message.channel.name[6:])
+   if user is None:
+      return await message.channel.send("Utilisateur non trouvé")
+   
+   if sujet_nom == "suivant":
+      if user['sujet']:
+         sujet = await get_api(user['sujet'])
+         suiv = await get_suivant_api(sujet)
+         if suiv is None:
+            user['sujet'] = None
+         else:
+            user['sujet'] = suiv['url']
+   else:
+      sujet_code = await get_code_api(sujet_nom)
+      if sujet_code is not None:
+         user['sujet'] = sujet_code['url']
+      else:
+         return await message.channel.send("Sujet '{}' non trouvé".format(sujet_nom))
+   
+   await put_api(user['url'], user)
+   
+   sujet = await get_api(user['sujet'])
+   if sujet is None:
+      return await message.channel.send("Sujet '{}' non trouvé".format(sujet_nom))
+
+   recherche = await get_recherche_api(user, sujet)
+   
+   if recherche['demarrage_officiel'] == None:
+      recherche['demarrage_officiel'] = datetime.utcnow().isoformat()
+   if recherche['premiere_lecture'] == None:
+      recherche['premiere_lecture'] = datetime.utcnow().isoformat()
+   
+   await put_api(recherche['url'], recherche) 
+   
+   lien = sujet['lien']
+   await message.channel.send(str(lien))
+   return True
+
+async def cmd_nettoie(message, n=10, *args):
+   try:
+      n = int(n)
+   except ValueError:
+      n = 10
+   await message.channel.purge(limit = n+1) # +1 for the command
+
+COMMANDS = { # (cmd_function, trainer_role_required)
+   'candidat' : (cmd_candidat, True),
+   'maj' : (cmd_maj, False),
+   'dire' : (cmd_dire, True),
+   'sujet' : (cmd_sujet, False),
+   'valider' : (cmd_valider, True),
+   'donner' : (cmd_donner, True),
+   'nettoie' : (cmd_nettoie, True),
+}
+
+#################### CLIENT & EVENTS ####################
 
 @client.event
 async def on_ready():
    print('%s has connected to Discord!' % client.user)
-   
-async def say(typ, message, guild):
-   for category in guild.categories:
-      if category.name.startswith("GROUPE-") and category.name == "GROUPE-" + typ:  
-         for channel in category.channels:
-            if channel.name.startswith("salon-"):
-               await channel.send(message)
-
-async def update_board(guild):
-   global queue
-   
-   nqueue = []
-   for category in guild.categories:
-      if category.name.startswith("GROUPE-"):
-         category_name = category.name[7:]  
-
-         for user in get_channel(guild, 'couloir-' + category_name).members:
-            obj = get_object(user)
-            if obj == None:
-               nqueue.append({"member":user, "category":category_name, "time":datetime.utcnow()})
-               
-               user_channel = get_user_channel(user)
-               if user_channel != None:
-                  await user_channel.send(get_nick(user) + " a rejoint le couloir (" + utc_to_local(datetime.utcnow()).strftime("%Hh%Mm%Ss") + ")\n N'oubliez pas de mettre un message dans votre salon perso disant ce que vous attendez (soumission, aide sur un sujet, etc.)")
-            else:
-               nqueue.append({"member":user, "category":category_name, "time": obj["time"]})
-   
-   queue = sorted(nqueue, key=lambda user: user["time"])
-   
-   msg = "Commandes : \n"
-   msg += "```!candidat\n!candidat Nom_Du_Groupe\n!candidat Nom_Du_Candidat (ex: arthur-l)\n!maj\n!dire Nom_Du_Groupe Message\n!sujet\n!sujet suivant\n!nettoie\n!valider\n!valider suivant\n!donner suivant\n!donner Id_Du_Sujet (ex: G.10)```\n"
-   
-   msg += "Liste des utilisateurs : \n```\n"
-   for user in queue:
-      msg += get_nick(user["member"]) + " " + user["category"] + "\t\t\t(" + utc_to_local(user["time"]).strftime("%Hh%Mm%Ss") + ") \n"
-   msg += "```\n"
-   
-   await get_channel(guild, 'commandes-bot').purge(limit = 10)
-   await get_channel(guild, 'commandes-bot').send(msg)
+   for guild in client.guilds:
+      await update_board(guild)
 
 @client.event
 async def on_message(message):
-   if message.author == client.user:
+   if message.author == client.user or not message.content.startswith('!'):
       return
       
    words = message.content.split()
-   if len(words) != 0 and words[0] == '!candidat':
-      if not est_entraineur(message.author):
-         return
-      if message.author.voice == None:
-         await message.channel.send("Vous n'êtes pas dans un salon audio")
-         return
-      
-      await message.channel.purge(limit = 1)
-      
-      user = None
-      if len(words) == 1:
-         user = get_category('')
-         await move_to(get_category(''), message.author.voice.channel)
-      elif words[1] == words[1].upper():
-         user = get_category(words[1])
+   command = words[0][1:] # Without '!'
+
+   if command in COMMANDS:
+      fct, require_trainer = COMMANDS[command]
+      if require_trainer and not est_entraineur(message.author):
+         await message.channel.send('Vous n\'êtes pas entraîneur, vous ne pouvez pas utiliser cette commande')
       else:
-         for role in message.guild.roles:
-            if role.name == "u-" + words[1]:
-               user = role.members[0]
-         
-      if user != None:
-         user_channel = get_user_channel(user)
-         if user_channel != None:
-            await user_channel.send(get_nick(user) + " a discuté avec " + get_nick(message.author) + " (" + utc_to_local(datetime.utcnow()).strftime("%Hh%Mm%Ss") + ")")
-         await move_to(user, message.author.voice.channel)
-   
-   elif len(words) != 0 and words[0] == '!maj':
-      await message.channel.purge(limit = 1)
-      await update_board(message.channel.guild)
-   
-   elif len(words) >= 2 and words[0] == "!dire":
-      if not est_entraineur(message.author):
-         return
-      await message.channel.purge(limit = 1)
-      await say(words[1], get_nick(message.author) + " : " + message.content[(7 + len(words[1])):], message.channel.guild)
-   
-   elif len(words) >= 1 and words[0] == "!sujet":
-      if message.channel.name.startswith("salon-"):
-         await message.channel.purge(limit = 1)
-         
-         user = get_user(message.channel.name[6:])
-         
-         if user != None and user['sujet'] != None:
-            sujet = get_api(user['sujet'])
-            
-            if len(words) >= 2 and words[1] == "suivant":
-               sujet = get_suivant(sujet)
-               
-               if sujet == None:
-                   await message.channel.send("Pas de sujet suivant dans ce parcours")
-                   return
-            
-            lien = sujet['lien']
-            await message.channel.send(str(lien))
-            
-            recherche = get_recherche(user, sujet)
-            if recherche['premiere_lecture'] == None:
-               recherche['premiere_lecture'] = datetime.utcnow().isoformat()
-               put_api(recherche['url'], recherche)
-   
-   elif len(words) >= 1 and words[0] == "!valider":
-      if not est_entraineur(message.author):
-         return
-      
-      if message.channel.name.startswith("salon-"):
-         await message.channel.purge(limit = 1)
-         user = get_user(message.channel.name[6:])
-         
-         if user != None and user['sujet'] != None:
-            sujet = get_api(user['sujet'])
-            
-            if len(words) >= 2 and words[1] == "suivant":
-               sujet = get_suivant(sujet)
-            
-            print(sujet)
-            
-            recherche = get_recherche(user, sujet)
-            if recherche['validation'] == None:
-               recherche['validation'] = datetime.utcnow().isoformat()
-               put_api(recherche['url'], recherche)
-            
-            parcours = get_api(sujet['parcours'])
-            await message.channel.send("Sujet " + parcours['code'] + "." + str(sujet['ordre']) + ") " + sujet['nom'] + " validé par " + get_nick(message.author))
-            if sujet['correction'] != None and sujet['correction'] != "":
-               await message.channel.send(sujet['correction'])
-   
-   elif len(words) >= 2 and words[0] == "!donner":
-      if not est_entraineur(message.author):
-         return
-      
-      if message.channel.name.startswith("salon-"):
-         await message.channel.purge(limit = 1)
-         user = get_user(message.channel.name[6:])
-         
-         
-            
-         if words[1] == "suivant":
-            if user and user['sujet']:
-               sujet = get_api(user['sujet'])
-               suiv = get_suivant(sujet)
-               if suiv == None:
-                  user['sujet'] = None
-               else:
-                  user['sujet'] = suiv['url']
-         else:
-            user['sujet'] = get_code(words[1])['url']
-         
-         put_api(user['url'], user)
-         
-         sujet = get_api(user['sujet'])
-         recherche = get_recherche(user, sujet)
-         
-         if recherche['demarrage_officiel'] == None:
-            recherche['demarrage_officiel'] = datetime.utcnow().isoformat()
-         if recherche['premiere_lecture'] == None:
-            recherche['premiere_lecture'] = datetime.utcnow().isoformat()
-         
-         put_api(recherche['url'], recherche) 
-         
-         lien = sujet['lien']
-         await message.channel.send(str(lien))
-      
-   elif len(words) >= 1 and words[0] == "!nettoie":
-      if not est_entraineur(message.author):
-         return
-      await message.channel.purge(limit = 10)
+         try:
+            if await fct(message, *words[1:]) is True:
+               try:
+                  await message.delete()
+               except discord.errors.NotFound:
+                  pass # Message already deleted
+         except:
+            tb = traceback.format_exc()
+            print(tb)
+            await message.channel.send('Une erreur est survenue : \n' + tb)
+   else:
+      await message.channel.send('La commande {} n\'existe pas'.format(command))
 
 @client.event
 async def on_voice_state_update(member, before, after):
@@ -304,5 +460,6 @@ async def on_voice_state_update(member, before, after):
       await update_board(member.guild)
    elif after.channel != None and after.channel.name.startswith("couloir"):
       await update_board(member.guild)
-   
+
+client.loop.create_task(notify_trainers())
 client.run(TOKEN)
