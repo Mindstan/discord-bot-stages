@@ -2,11 +2,20 @@ import os
 import traceback
 import asyncio
 import discord
-import requests
+import aiohttp
 import json
 from datetime import datetime
 from dotenv import load_dotenv
 import pytz
+
+class BotClient(discord.Client):   
+   async def connect(self, *args, **kwargs):
+      self.api_session = aiohttp.ClientSession()
+      await super().connect(*args, **kwargs)
+
+   async def close(self):
+      await super().close()
+      await self.api_session.close()
 
 local_tz = pytz.timezone('Europe/Paris')
 
@@ -19,46 +28,47 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 API_URL = os.getenv('API_URL')
 API_TOKEN = os.getenv('API_TOKEN', '')
 
-client = discord.Client()
-
+client = BotClient()
 queue = []
 
 #################### API ####################
 
-def get_api(url):
-   xhr = requests.get(url, headers={"Authorization": API_TOKEN,"Content-type": "application/json"})
-   return json.loads(xhr.content.decode('utf-8'))
+API_HEADERS = {"Authorization": API_TOKEN, "Content-type": "application/json"}
 
-def put_api(url, data):
-   xhr = requests.put(url, headers={"Authorization": API_TOKEN,"Content-type": "application/json"}, data=json.dumps(data))
-   return json.loads(xhr.content.decode('utf-8'))
+async def get_api(url):
+   async with client.api_session.get(url, headers=API_HEADERS) as resp:
+      return await resp.json()
 
-def post_api(url, data):
-   xhr = requests.post(url, headers={"Authorization": API_TOKEN,"Content-type": "application/json"}, data=json.dumps(data))
-   return json.loads(xhr.content.decode('utf-8'))
+async def put_api(url, data):
+   async with client.api_session.put(url, headers=API_HEADERS, json=data) as resp:
+      return await resp.json()
 
-def get_user(name):
-   users = get_api(API_URL + "/api/candidat/")
+async def post_api(url, data):
+   async with client.api_session.post(url, headers=API_HEADERS, json=data) as resp:
+      return await resp.json()
+
+async def get_user_api(name):
+   users = await get_api(API_URL + "/api/candidat/")
    
    for user in users:
       if user['discord_name'] == name:
          return user
    return None
 
-def get_recherche(candidat, sujet):
-   recherches = get_api(API_URL + "/api/recherche?sujet=" + str(sujet['id']) + "&candidat=" + str(candidat['id']))
+async def get_recherche_api(candidat, sujet):
+   recherches = await get_api(API_URL + "/api/recherche?sujet=" + str(sujet['id']) + "&candidat=" + str(candidat['id']))
    
    if len(recherches) >= 1:
       return recherches[0]
    
-   nouv = post_api(API_URL + "/api/recherche/", {
+   nouv = await post_api(API_URL + "/api/recherche/", {
       "candidat": candidat['url'],
       "sujet": sujet['url']
    })
    return nouv
    
-def get_suivant(sujet):
-   sujets = get_api(API_URL + "/api/sujet/")
+async def get_suivant_api(sujet):
+   sujets = await get_api(API_URL + "/api/sujet/")
    
    for nouv in sujets:
       if nouv['parcours'] == sujet['parcours'] and nouv['ordre'] == sujet['ordre'] + 1:
@@ -66,9 +76,9 @@ def get_suivant(sujet):
    
    return None
 
-def get_code(code):
-   sujets = get_api(API_URL + "/api/sujet/")
-   parcours = get_api(API_URL + "/api/parcours/")
+async def get_code_api(code):
+   sujets = await get_api(API_URL + "/api/sujet/")
+   parcours = await get_api(API_URL + "/api/parcours/")
    
    p = {}
    for parcour in parcours:
@@ -290,26 +300,26 @@ async def cmd_sujet(message, sujet_suivant=None, *args):
    if not message.channel.name.startswith("salon-"):
       return await message.channel.send("Cette commande ne peut pas être utilisée dans ce canal")
 
-   user = get_user(message.channel.name[6:])
+   user = await get_user_api(message.channel.name[6:])
    
    if user != None and user['sujet'] != None:
       if sujet_suivant == "suivant":
-         sujet = get_suivant(sujet)
+         sujet = await get_suivant_api(sujet)
          
          if sujet == None:
             return await message.channel.send("Pas de sujet suivant dans ce parcours")
       else:
-         sujet = get_api(user['sujet'])
+         sujet = await get_api(user['sujet'])
          if sujet == None:
             return await message.channel.send("Pas de sujet en cours")
       
       lien = sujet['lien']
       await message.channel.send(str(lien))
       
-      recherche = get_recherche(user, sujet)
+      recherche = await get_recherche_api(user, sujet)
       if recherche['premiere_lecture'] == None:
          recherche['premiere_lecture'] = datetime.utcnow().isoformat()
-         put_api(recherche['url'], recherche)
+         await put_api(recherche['url'], recherche)
       return True
    else:
       return await message.channel.send("Utilisateur invalide")
@@ -317,7 +327,7 @@ async def cmd_sujet(message, sujet_suivant=None, *args):
 async def cmd_valider(message, arg_suivant=None, *args):
    if not message.channel.name.startswith("salon-"):
       return await message.channel.send("Cette commande ne peut pas être utilisée dans ce canal")
-   user = get_user(message.channel.name[6:])
+   user = await get_user_api(message.channel.name[6:])
 
    if user is None:
       return await message.channel.send("Utilisateur non trouvé")
@@ -325,26 +335,25 @@ async def cmd_valider(message, arg_suivant=None, *args):
       return await message.channel.send("Pas de sujet en cours")
    
    if arg_suivant == "suivant":
-      sujet = get_suivant(sujet)
+      sujet = await get_suivant_api(sujet)
       if sujet is None:
          return await message.channel.send("Pas de sujet suivant")
    elif arg_suivant is not None:
-      sujet = get_api(arg_suivant)
-      if sujet is None:
+      sujet_code = await get_code_api(arg_suivant)
+      if sujet_code is None:
          return await message.channel.send("Sujet '{}' inconnu".format(arg_suivant))
+      sujet = await get_api(sujet_code['url'])
    else:
-      sujet = get_api(user['sujet'])
+      sujet = await get_api(user['sujet'])
       if sujet is None:
          return await message.channel.send("Pas de sujet en cours")
-   
-   print(sujet)
-   
-   recherche = get_recherche(user, sujet)
+      
+   recherche = await get_recherche_api(user, sujet)
    if recherche['validation'] == None:
       recherche['validation'] = datetime.utcnow().isoformat()
-      put_api(recherche['url'], recherche)
+      await put_api(recherche['url'], recherche)
    
-   parcours = get_api(sujet['parcours'])
+   parcours = await get_api(sujet['parcours'])
    await message.channel.send("Sujet " + parcours['code'] + "." + str(sujet['ordre']) + ") " + sujet['nom'] + " validé par " + get_nick(message.author))
    if sujet['correction'] != None and sujet['correction'] != "":
       await message.channel.send(sujet['correction'])
@@ -356,39 +365,39 @@ async def cmd_donner(message, sujet_nom=None, *args):
    if not message.channel.name.startswith("salon-"):
       return await message.channel.send("Cette commande ne peut être utilisée dans ce canal")
 
-   user = get_user(message.channel.name[6:])
+   user = await get_user_api(message.channel.name[6:])
    if user is None:
       return await message.channel.send("Utilisateur non trouvé")
    
    if sujet_nom == "suivant":
       if user['sujet']:
-         sujet = get_api(user['sujet'])
-         suiv = get_suivant(sujet)
+         sujet = await get_api(user['sujet'])
+         suiv = await get_suivant_api(sujet)
          if suiv is None:
             user['sujet'] = None
          else:
             user['sujet'] = suiv['url']
    else:
-      sujet_code = get_code(sujet_nom)
+      sujet_code = await get_code_api(sujet_nom)
       if sujet_code is not None:
          user['sujet'] = sujet_code['url']
       else:
          return await message.channel.send("Sujet '{}' non trouvé".format(sujet_nom))
    
-   put_api(user['url'], user)
+   await put_api(user['url'], user)
    
-   sujet = get_api(user['sujet'])
+   sujet = await get_api(user['sujet'])
    if sujet is None:
       return await message.channel.send("Sujet '{}' non trouvé".format(sujet_nom))
 
-   recherche = get_recherche(user, sujet)
+   recherche = await get_recherche_api(user, sujet)
    
    if recherche['demarrage_officiel'] == None:
       recherche['demarrage_officiel'] = datetime.utcnow().isoformat()
    if recherche['premiere_lecture'] == None:
       recherche['premiere_lecture'] = datetime.utcnow().isoformat()
    
-   put_api(recherche['url'], recherche) 
+   await put_api(recherche['url'], recherche) 
    
    lien = sujet['lien']
    await message.channel.send(str(lien))
@@ -451,6 +460,6 @@ async def on_voice_state_update(member, before, after):
       await update_board(member.guild)
    elif after.channel != None and after.channel.name.startswith("couloir"):
       await update_board(member.guild)
-   
+
 client.loop.create_task(notify_trainers())
 client.run(TOKEN)

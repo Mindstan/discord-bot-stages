@@ -9,10 +9,10 @@ Bot Discord pour les stages
 * Python 3.5 or higher
 * python-dotenv
 * discord.py
-* requests
+* aiohttp
 * pytz
 
-The Python modules can be installed with `pip install python-dotenv discord.py requests pytz` if you have pip installed.
+The Python modules can be installed with `pip install python-dotenv discord.py aiohttp pytz` if you have pip installed.
 
 ### To run the API
 
