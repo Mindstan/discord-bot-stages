@@ -138,9 +138,11 @@ def get_first_user_of_category(category):
 
 async def get_sujet_of_msg(sujet_name, message, user):
    if user is None:
-      return await message.channel.send("Utilisateur non trouvé")
+      await message.channel.send("Utilisateur non trouvé")
+      return None
    if user['sujet'] is None:
-      return await message.channel.send("Pas de sujet en cours")
+      await message.channel.send("Pas de sujet en cours")
+      return None
 
    if sujet_name == "suivant":
       sujet = await get_api(user['sujet'])
@@ -326,7 +328,8 @@ async def cmd_dire(message, group_name='', *args):
 
 async def cmd_sujet(message, sujet_suivant=None, *args):
    if not message.channel.name.startswith("salon-"):
-      return await message.channel.send("Cette commande ne peut pas être utilisée dans ce canal")
+      await message.channel.send("Cette commande ne peut pas être utilisée dans ce canal")
+      return None
 
    user = await get_user_api(message.channel.name[6:])
    sujet = await get_sujet_of_msg(sujet_suivant, message, user)
@@ -344,7 +347,8 @@ async def cmd_sujet(message, sujet_suivant=None, *args):
 
 async def cmd_valider(message, arg_suivant=None, *args):
    if not message.channel.name.startswith("salon-"):
-      return await message.channel.send("Cette commande ne peut pas être utilisée dans ce canal")
+      await message.channel.send("Cette commande ne peut pas être utilisée dans ce canal")
+      return None
    user = await get_user_api(message.channel.name[6:])
 
    sujet = await get_sujet_of_msg(arg_suivant, message, user)
@@ -364,13 +368,16 @@ async def cmd_valider(message, arg_suivant=None, *args):
 
 async def cmd_donner(message, sujet_nom=None, *args):
    if sujet_nom is None:
-      return await message.channel.send("Cette commande nécessite de donner le nom du sujet")
+      await message.channel.send("Cette commande nécessite de donner le nom du sujet")
+      return None
    if not message.channel.name.startswith("salon-"):
-      return await message.channel.send("Cette commande ne peut être utilisée dans ce canal")
+      await message.channel.send("Cette commande ne peut être utilisée dans ce canal")
+      return None
 
    user = await get_user_api(message.channel.name[6:])
    if user is None:
-      return await message.channel.send("Utilisateur non trouvé")
+      await message.channel.send("Utilisateur non trouvé")
+      return None
    
    if sujet_nom == "suivant":
       if user['sujet']:
@@ -385,13 +392,15 @@ async def cmd_donner(message, sujet_nom=None, *args):
       if sujet_code is not None:
          user['sujet'] = sujet_code['url']
       else:
-         return await message.channel.send("Sujet '{}' non trouvé".format(sujet_nom))
+         await message.channel.send("Sujet '{}' non trouvé".format(sujet_nom))
+      return None
    
    await put_api(user['url'], user)
    
    sujet = await get_api(user['sujet'])
    if sujet is None:
-      return await message.channel.send("Sujet '{}' non trouvé".format(sujet_nom))
+      await message.channel.send("Sujet '{}' non trouvé".format(sujet_nom))
+      return None
 
    recherche = await get_recherche_api(user, sujet)
    
@@ -439,23 +448,34 @@ async def on_message(message):
    words = message.content.split()
    command = words[0][1:] # Without '!'
 
-   if command in COMMANDS:
-      fct, require_trainer = COMMANDS[command]
-      if require_trainer and not est_entraineur(message.author):
-         await message.channel.send('Vous n\'êtes pas entraîneur, vous ne pouvez pas utiliser cette commande')
-      else:
-         try:
-            if await fct(message, *words[1:]) is True:
-               try:
-                  await message.delete()
-               except discord.errors.NotFound:
-                  pass # Message already deleted
-         except:
-            tb = traceback.format_exc()
-            print(tb)
-            await message.channel.send('Une erreur est survenue : \n' + tb)
-   else:
+   if command not in COMMANDS:
       await message.channel.send('La commande {} n\'existe pas'.format(command))
+      return
+
+   fct, require_trainer = COMMANDS[command]
+   if require_trainer and not est_entraineur(message.author):
+      await message.channel.send('Vous n\'êtes pas entraîneur, vous ne pouvez pas utiliser cette commande')
+   else:
+      try:
+         if await fct(message, *words[1:]) is True:
+            try:
+               await message.delete()
+            except discord.errors.NotFound:
+               pass # Message already deleted
+      except aiohttp.client_exceptions.ClientConnectorError as e:
+         host = f'{e.host}:{e.port}'
+         print("[ERROR]", e)
+         await message.channel.send(f"Impossible de se connecter à l'API ({host})")
+      except aiohttp.client_exceptions.ContentTypeError as e:
+         print('[ERROR]', e, e.args)
+         reqInfos = e.args[0]
+         await message.channel.send(f"Erreur de la part de l'API ({reqInfos.method} {reqInfos.url}) : {e.message}")
+      except:
+         tb = traceback.format_exc()
+         print(tb)
+         if len(tb) > 1900:
+            tb = tb[:1900] + "[...] (traceback too long to be displayed)"
+         await message.channel.send('Une erreur est survenue : \n' + tb)
 
 @client.event
 async def on_voice_state_update(member, before, after):
