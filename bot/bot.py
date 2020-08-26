@@ -470,6 +470,10 @@ async def on_message(message):
          print('[ERROR]', e, e.args)
          reqInfos = e.args[0]
          await message.channel.send(f"Erreur de la part de l'API ({reqInfos.method} {reqInfos.url}) : {e.message}")
+      except aiohttp.client_exceptions.ClientError as e:
+         await message.channel.send(f"Erreur avec l'API : {e}\n\n{e.args}")
+         print("[API ERROR]", e)
+         print(traceback.format_exc())
       except:
          tb = traceback.format_exc()
          print(tb)
