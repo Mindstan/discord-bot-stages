@@ -4,6 +4,7 @@ import asyncio
 import discord
 import aiohttp
 from datetime import datetime
+import dateutil.parser
 from dotenv import load_dotenv
 import pytz
 
@@ -29,6 +30,9 @@ API_TOKEN = os.getenv('API_TOKEN', '')
 
 client = BotClient()
 queue = []
+
+class APIError(Exception):
+   pass
 
 #################### API ####################
 
@@ -88,6 +92,8 @@ async def get_code_api(code):
       p[parcour['url']] = parcour
    
    for nouv in sujets:
+      if nouv['parcours'] is None:
+         raise APIError(f"Erreur dans la base de données : La clé 'parcours' associée au sujet d'id {nouv['id']} ({nouv['nom']}) vaut None")
       if p[nouv['parcours']]['code'] + '.' + str(nouv['ordre']) == code:
          return nouv
    
@@ -218,6 +224,8 @@ async def update_board(guild):
       "!nettoie [nb_lignes]\n"
       "!valider [suivant | Id_Du_Sujet]\n"
       "!donner [suivant | Id_Du_Sujet]  (ex : !donner G.10)\n"
+      "!pause [utilisateur | nom-du-groupe | ALL]  (ex : !pause GROUPE-ALGOREA-1)\n"
+      "!reprendre [utilisateur | nom-du-groupe | ALL]  (ex : !reprendre ALL)\n"
       "```\n\n"
    
       "Liste des utilisateurs : \n"
@@ -279,6 +287,66 @@ async def notify_trainers(): # Won't work with mutliple servers
 
       await asyncio.sleep(SLEEP_TIME)
 
+# ---------- Gestion des pauses
+
+
+async def get_target_of(message, target):
+   if target is None and message.channel.name.startswith("salon-"):
+      return [await get_user_api(message.channel.name[6:])]
+   elif target:
+      chans = []
+      for c in message.guild.channels:
+         if target == 'ALL':
+            if isinstance(c, discord.TextChannel) and c.name.startswith('salon-'):
+               chans.append(c)
+         elif isinstance(c, discord.TextChannel) and c.name == 'salon-' + target:
+            chans.append(c)
+         elif isinstance(c, discord.CategoryChannel) and c.name == target:
+            for c2 in c.channels:
+               if isinstance(c, discord.TextChannel) and c.name.startswith('salon-'):
+                  chans.append(c2)
+      users = []
+      for c in chans:
+         user = await get_user_api(c.name[6:])
+         if user is None:
+            print("WARNING : !pause concernait un utilisateur n'étant pas dans la BDD")
+         else:
+            users.append(user)
+      return users
+   else:
+      await message.channel.send(f"Pour mettre un pause un ou des utilisateurs, merci de préciser la cible ('ALL', un groupe ou un utilisateur (en le mentionnant avec @...) ou de vous placer dans le salon d'un utilisateur")
+   return None
+
+
+async def set_pause_state(users_list, set_pause):
+   for user in users_list:
+      if user['sujet'] is not None:
+         sujet_url = user['sujet']
+         if isinstance(sujet_url, dict):
+            sujet_url = sujet_url['url']
+         recherche = await get_recherche_api(user, {
+             'id': user['sujet_id'],
+             'url': sujet_url,
+         })
+         if recherche['faux_debut'] == None:
+            recherche['faux_debut'] = recherche['demarrage_officiel']
+         if recherche['validation'] is not None:
+            continue  # Inutile de mettre en pause un sujet fini...
+
+         if set_pause and recherche['debut_pause'] is None:
+            recherche['debut_pause'] = datetime.utcnow().isoformat()
+         elif not set_pause and recherche['debut_pause'] is not None:
+            deb = dateutil.parser.isoparse(recherche['faux_debut'])
+            fin = dateutil.parser.isoparse(recherche['debut_pause'])
+            new_false = datetime.utcnow() - (fin - deb)
+
+            recherche['debut_pause'] = None
+            recherche['faux_debut'] = new_false.isoformat()
+         else:
+            continue  # Rien à update pour le candidat, pas la peine de surcharger l'API
+
+         await put_api(recherche['url'], recherche)
+
 #################### COMMANDS ####################
 
 async def cmd_candidat(message, username=None, *args):
@@ -311,6 +379,9 @@ async def cmd_candidat(message, username=None, *args):
       return True
    elif username:
       await message.channel.send("Impossible de trouver l'utilisateur {}".format(username))
+   else:
+      await message.channel.send("Aucun utilisateur en attente")
+      return True
 
 async def cmd_maj(message, *args):
    await update_board(message.channel.guild)
@@ -337,6 +408,13 @@ async def cmd_sujet(message, sujet_suivant=None, *args):
       return None
    
    lien = sujet['lien']
+   recherche = await get_recherche_api(user, sujet)
+   label = '[En cours]'
+   if recherche['validation'] is not None:
+      label = '[Validé]'
+   elif recherche['debut_pause'] is not None:
+      label = '[En pause]'
+   await message.channel.send(f"Sujet actuel : {sujet['nom']} {label}")
    await message.channel.send(str(lien))
    
    recherche = await get_recherche_api(user, sujet)
@@ -379,6 +457,9 @@ async def cmd_donner(message, sujet_nom=None, *args):
       await message.channel.send("Utilisateur non trouvé")
       return None
    
+   if user['sujet']:
+      await set_pause_state([user], True) # Si le sujet n'est pas validé, mise en pause
+   
    if sujet_nom == "suivant":
       if user['sujet']:
          sujet = await get_api(user['sujet'])
@@ -393,8 +474,8 @@ async def cmd_donner(message, sujet_nom=None, *args):
          user['sujet'] = sujet_code['url']
       else:
          await message.channel.send("Sujet '{}' non trouvé".format(sujet_nom))
-      return None
-   
+         return False
+
    await put_api(user['url'], user)
    
    sujet = await get_api(user['sujet'])
@@ -403,13 +484,18 @@ async def cmd_donner(message, sujet_nom=None, *args):
       return None
 
    recherche = await get_recherche_api(user, sujet)
-   
-   if recherche['demarrage_officiel'] == None:
+   user['sujet'] = sujet
+   user['sujet_id'] = sujet['id']
+
+   if recherche['demarrage_officiel'] is None:
       recherche['demarrage_officiel'] = datetime.utcnow().isoformat()
-   if recherche['premiere_lecture'] == None:
+   if recherche['premiere_lecture'] is None:
       recherche['premiere_lecture'] = datetime.utcnow().isoformat()
-   
-   await put_api(recherche['url'], recherche) 
+
+   await put_api(recherche['url'], recherche)
+
+   if recherche['debut_pause'] is not None:
+      await set_pause_state([user], False) # Si le sujet était en cours, on reprends
    
    lien = sujet['lien']
    await message.channel.send(str(lien))
@@ -420,7 +506,27 @@ async def cmd_nettoie(message, n=10, *args):
       n = int(n)
    except ValueError:
       n = 10
-   await message.channel.purge(limit = n+1) # +1 for the command
+   await message.channel.purge(limit=n + 1)  # +1 for the command
+   
+async def cmd_pause(message, target=None, *args):
+   users = await get_target_of(message, target)
+   if users is None:
+      return False
+   users_names = [f"{u['prenom']} {u['nom']}" for u in users]
+   await set_pause_state(users, True)
+
+   await message.channel.send(f"Mise en pause de : {', '.join(users_names)}")
+   return True
+
+async def cmd_reprendre(message, target=None, *args):
+   users = await get_target_of(message, target)
+   if users is None:
+      return False
+   users_names = [f"{u['prenom']} {u['nom']}" for u in users]
+   await set_pause_state(users, False)
+
+   await message.channel.send(f"Reprise pour : {', '.join(users_names)}")
+   return True
 
 COMMANDS = { # (cmd_function, trainer_role_required)
    'candidat' : (cmd_candidat, True),
@@ -430,6 +536,8 @@ COMMANDS = { # (cmd_function, trainer_role_required)
    'valider' : (cmd_valider, True),
    'donner' : (cmd_donner, True),
    'nettoie' : (cmd_nettoie, True),
+   'pause' : (cmd_pause, True),
+   'reprendre' : (cmd_reprendre, True),
 }
 
 #################### CLIENT & EVENTS ####################
@@ -474,6 +582,9 @@ async def on_message(message):
          await message.channel.send(f"Erreur avec l'API : {e}\n\n{e.args}")
          print("[API ERROR]", e)
          print(traceback.format_exc())
+      except APIError as e:
+         print("[ERREUR DE L'API]", e)
+         await message.channel.send(f"[ERREUR DE L'API] {e}")
       except:
          tb = traceback.format_exc()
          print(tb)
