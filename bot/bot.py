@@ -93,7 +93,7 @@ async def get_code_api(code):
    
    for nouv in sujets:
       if nouv['parcours'] is None:
-         raise APIError(f"Erreur dans la base de données : La clé 'parcours' associée au sujet d'id {nouv['id']} ({nouv['nom']}) vaut None")
+         raise APIError("Erreur dans la base de données : La clé 'parcours' associée au sujet d'id {} ({}) vaut None".format(nouv['id'], nouv['nom']))
       if p[nouv['parcours']]['code'] + '.' + str(nouv['ordre']) == code:
          return nouv
    
@@ -314,7 +314,7 @@ async def get_target_of(message, target):
             users.append(user)
       return users
    else:
-      await message.channel.send(f"Pour mettre un pause un ou des utilisateurs, merci de préciser la cible ('ALL', un groupe ou un utilisateur (en le mentionnant avec @...) ou de vous placer dans le salon d'un utilisateur")
+      await message.channel.send("Pour mettre un pause un ou des utilisateurs, merci de préciser la cible ('ALL', un groupe ou un utilisateur (en le mentionnant avec @...) ou de vous placer dans le salon d'un utilisateur")
    return None
 
 
@@ -414,7 +414,7 @@ async def cmd_sujet(message, sujet_suivant=None, *args):
       label = '[Validé]'
    elif recherche['debut_pause'] is not None:
       label = '[En pause]'
-   await message.channel.send(f"Sujet actuel : {sujet['nom']} {label}")
+   await message.channel.send("Sujet actuel : {} {}".format(sujet['nom'], label))
    await message.channel.send(str(lien))
    
    recherche = await get_recherche_api(user, sujet)
@@ -512,20 +512,20 @@ async def cmd_pause(message, target=None, *args):
    users = await get_target_of(message, target)
    if users is None:
       return False
-   users_names = [f"{u['prenom']} {u['nom']}" for u in users]
+   users_names = ["{} {}".format(u['prenom'], u['nom']) for u in users]
    await set_pause_state(users, True)
 
-   await message.channel.send(f"Mise en pause de : {', '.join(users_names)}")
+   await message.channel.send("Mise en pause de : {}".format(', '.join(users_names)))
    return True
 
 async def cmd_reprendre(message, target=None, *args):
    users = await get_target_of(message, target)
    if users is None:
       return False
-   users_names = [f"{u['prenom']} {u['nom']}" for u in users]
+   users_names = ["{} {}".format(u['prenom'], u['nom']) for u in users]
    await set_pause_state(users, False)
 
-   await message.channel.send(f"Reprise pour : {', '.join(users_names)}")
+   await message.channel.send("Reprise pour : {}".format(', '.join(users_names)))
    return True
 
 COMMANDS = { # (cmd_function, trainer_role_required)
@@ -571,20 +571,20 @@ async def on_message(message):
             except discord.errors.NotFound:
                pass # Message already deleted
       except aiohttp.client_exceptions.ClientConnectorError as e:
-         host = f'{e.host}:{e.port}'
+         host = '{} {}'.format(e.host, e.port)
          print("[ERROR]", e)
-         await message.channel.send(f"Impossible de se connecter à l'API ({host})")
+         await message.channel.send("Impossible de se connecter à l'API ({})".format(host))
       except aiohttp.client_exceptions.ContentTypeError as e:
          print('[ERROR]', e, e.args)
          reqInfos = e.args[0]
-         await message.channel.send(f"Erreur de la part de l'API ({reqInfos.method} {reqInfos.url}) : {e.message}")
+         await message.channel.send("Erreur de la part de l'API ({} {}) : {}".format(reqInfos.method, reqInfos.url, e.message))
       except aiohttp.client_exceptions.ClientError as e:
-         await message.channel.send(f"Erreur avec l'API : {e}\n\n{e.args}")
+         await message.channel.send("Erreur avec l'API : {}\n\n{}".format(e, e.args))
          print("[API ERROR]", e)
          print(traceback.format_exc())
       except APIError as e:
          print("[ERREUR DE L'API]", e)
-         await message.channel.send(f"[ERREUR DE L'API] {e}")
+         await message.channel.send("[ERREUR DE L'API] {}".format(e))
       except:
          tb = traceback.format_exc()
          print(tb)
