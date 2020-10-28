@@ -292,7 +292,11 @@ async def notify_trainers(): # Won't work with mutliple servers
 
 async def get_target_of(message, target):
    if target is None and message.channel.name.startswith("salon-"):
-      return [await get_user_api(message.channel.name[6:])]
+      user = await get_user_api(message.channel.name[6:])
+      if user is None:
+         print("WARNING : !pause concernait un utilisateur n'étant pas dans la BDD")
+         return []
+      return [user]
    elif target:
       chans = []
       for c in message.guild.channels:
@@ -303,7 +307,7 @@ async def get_target_of(message, target):
             chans.append(c)
          elif isinstance(c, discord.CategoryChannel) and c.name == target:
             for c2 in c.channels:
-               if isinstance(c, discord.TextChannel) and c.name.startswith('salon-'):
+               if isinstance(c2, discord.TextChannel) and c2.name.startswith('salon-'):
                   chans.append(c2)
       users = []
       for c in chans:
@@ -507,6 +511,14 @@ async def cmd_nettoie(message, n=10, *args):
    except ValueError:
       n = 10
    await message.channel.purge(limit=n + 1)  # +1 for the command
+
+def get_chans_of_users(users, guild):
+   users = set([u['discord_name'] for u in users])
+   user_chans = []
+   for chan in guild.channels:
+      if chan.name.startswith('salon-') and chan.name[6:] in users:
+         user_chans.append(chan)
+   return user_chans
    
 async def cmd_pause(message, target=None, *args):
    users = await get_target_of(message, target)
@@ -514,6 +526,9 @@ async def cmd_pause(message, target=None, *args):
       return False
    users_names = ["{} {}".format(u['prenom'], u['nom']) for u in users]
    await set_pause_state(users, True)
+
+   for chan in get_chans_of_users(users, message.guild):
+      await chan.send("**Début de la pause**")
 
    await message.channel.send("Mise en pause de : {}".format(', '.join(users_names)))
    return True
@@ -524,6 +539,9 @@ async def cmd_reprendre(message, target=None, *args):
       return False
    users_names = ["{} {}".format(u['prenom'], u['nom']) for u in users]
    await set_pause_state(users, False)
+
+   for chan in get_chans_of_users(users, message.guild):
+      await chan.send("**Reprise du stage**")
 
    await message.channel.send("Reprise pour : {}".format(', '.join(users_names)))
    return True
