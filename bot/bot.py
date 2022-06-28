@@ -109,7 +109,7 @@ def est_invisile(user): # Non notifé par le bot
 
 def est_entraineur(user):
    for role in user.roles:
-      if role.name == "Entraîneur":
+      if (role.name == "Entraîneur") or (role.name == "Bot-validateur"):
          return True
    return False
 
