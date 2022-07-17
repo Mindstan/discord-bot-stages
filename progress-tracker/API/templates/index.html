@@ -60,6 +60,7 @@
         <button onclick="lire_recherche();">Lire</button>
         <button onclick="valider_recherche();">Valider</button>
         <button onclick="devalider_recherche();">Dévalider</button>
+        <button onclick="annuler_recherche();">Annuler démarrage et validation</button>
 
         <textarea id="commentaires_recherche" style="width:100%;height:300px;"></textarea><br />
 
@@ -104,6 +105,19 @@
             xhr.send(JSON.stringify(data));
         }
 
+        function patch_api(url, data, callback) {
+            var xhr = new XMLHttpRequest();
+            xhr.open("PATCH", url, true);
+            xhr.onreadystatechange = function () {
+                if (this.readyState == 4 && this.status == 200 && callback) {
+                    callback(JSON.parse(this.responseText));
+                }
+            };
+            xhr.setRequestHeader("Content-type", "application/json");
+            xhr.setRequestHeader("Authorization", api_token);
+            xhr.send(JSON.stringify(data));
+        }
+
         function post_api(url, data, callback) {
             var xhr = new XMLHttpRequest();
             xhr.open("POST", url, true);
@@ -132,8 +146,8 @@
             return "Première lecture il y a " + premiere_lecture + "<br/>"
                 + "Démarrage officiel il y a " + demarrage_officiel + "<br/>"
                 + "Temps passé dessus : " + delta_temps + "<br/>"
-            + (validation ? "Validation il y a " + validation + "<br/>"
-                : "");
+                + (validation ? "Validation il y a " + validation + "<br/>"
+                    : "");
         }
 
         function temps_str(temps) {
@@ -278,6 +292,12 @@
             }
         }
 
+        function annuler_recherche() {
+            // Permet aux entraîneurs de pouvoir corriger une erreur d’assignation
+            //(typiquement mauvais sujet à la mauvaise personne)
+            patch_api(cur_args[2].url, { premiere_lecture: null, demarrage_officiel: null, validation: null, faux_debut: null, debut_pause: null }, update_recherche);
+        }
+
         function valider_recherche() {
             if (cur_args.length == 2) {
                 post_api("/api/recherche/", {
@@ -317,8 +337,7 @@
                 });
             }
             else if (cur_args.length == 3) {
-                cur_args[2].commentaires = commentaires_recherche.value;
-                put_api(cur_args[2].url, cur_args[2]);
+                patch_api(cur_args[2].url, { commentaires: commentaires_recherche.value });
             }
         }
 
