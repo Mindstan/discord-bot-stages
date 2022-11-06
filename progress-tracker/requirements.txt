@@ -1,7 +1,0 @@
-gunicorn
-Django==2.2.4
-django-filter
-djangorestframework
-mysqlclient
-python-dateutil
-whitenoise

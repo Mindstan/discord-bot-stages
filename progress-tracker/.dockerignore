@@ -1,2 +1,2 @@
 Dockerfile
-env-vars
+.env

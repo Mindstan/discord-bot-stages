@@ -1,0 +1,27 @@
+networks:
+  progress-tracker:
+    name: progress-tracker
+
+services:
+  progress-tracker-app:
+    build: .
+    image: progress-tracker
+    container_name: progress-tracker-app
+    ports:
+      - "8008:80"
+    networks:
+      - progress-tracker
+    environment:
+      - DB_HOST=progress-tracker-db
+    env_file:
+      - .env
+
+  progress-tracker-db:
+    image: mariadb
+    container_name: progress-tracker-db
+    networks:
+      - progress-tracker
+    ports:
+      - "3306:3306"
+    env_file:
+      - .env
