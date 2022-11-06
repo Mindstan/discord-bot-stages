@@ -1,0 +1,44 @@
+- model: API.recherche
+  pk: 1
+  fields:
+    candidat: 1
+    sujet: 1
+    premiere_lecture: 2022-11-06 14:21:51+00:00
+    demarrage_officiel: 2022-11-06 14:22:58+00:00
+    validation: 2022-11-06 14:30:05+00:00
+    debut_pause: null
+    faux_debut: 2022-11-06 14:30:05+00:00
+    commentaires: "GG g\xE9g\xE9!"
+- model: API.recherche
+  pk: 2
+  fields:
+    candidat: 1
+    sujet: 2
+    premiere_lecture: 2022-10-06 14:24:25+00:00
+    demarrage_officiel: 2022-10-06 14:24:25+00:00
+    validation: null
+    debut_pause: null
+    faux_debut: 2022-11-06 13:20:25+00:00
+    commentaires: "Toujours en attente d\u2019une solution."
+- model: API.recherche
+  pk: 3
+  fields:
+    candidat: 1
+    sujet: 6
+    premiere_lecture: 2022-11-06 14:26:08+00:00
+    demarrage_officiel: null
+    validation: null
+    debut_pause: null
+    faux_debut: null
+    commentaires: ''
+- model: API.recherche
+  pk: 4
+  fields:
+    candidat: 1
+    sujet: 4
+    premiere_lecture: 2022-11-06 14:26:18+00:00
+    demarrage_officiel: 2022-11-06 14:26:20+00:00
+    validation: null
+    debut_pause: 2022-11-06 14:26:24+00:00
+    faux_debut: 2022-11-06 14:26:20+00:00
+    commentaires: PAUUUUUUUUUUUUUUSE

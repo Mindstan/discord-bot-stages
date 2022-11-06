@@ -1,0 +1,144 @@
+- model: API.sujet
+  pk: 1
+  fields:
+    nom: Facebook
+    parcours: 1
+    ordre: 1
+    lien: null
+    correction: null
+    explications: "Notions : Recherche exhaustive\r\nR\xE9sum\xE9 : On donne un graphe
+      non orient\xE9 et deux noeuds. Trouver tous les chemins simples entre les deux
+      noeuds."
+- model: API.sujet
+  pk: 2
+  fields:
+    nom: Liste sans doublons
+    parcours: 2
+    ordre: 1
+    lien: null
+    correction: null
+    explications: "Notions : table d'occurrence\r\nR\xE9sum\xE9 :"
+- model: API.sujet
+  pk: 3
+  fields:
+    nom: "Pierres pr\xE9cieuses"
+    parcours: 3
+    ordre: 1
+    lien: null
+    correction: null
+    explications: ''
+- model: API.sujet
+  pk: 4
+  fields:
+    nom: Colorier des zones avec un maximum de couleurs
+    parcours: 1
+    ordre: 2
+    lien: null
+    correction: null
+    explications: "Notions : Composantes connexes\r\nR\xE9sum\xE9 : On donne une grille
+      de cases noires et blanches. Trouver le nombre de zones blanches connexes."
+- model: API.sujet
+  pk: 5
+  fields:
+    nom: Candidats Ex Aequo
+    parcours: 2
+    ordre: 2
+    lien: null
+    correction: null
+    explications: ''
+- model: API.sujet
+  pk: 6
+  fields:
+    nom: "Poup\xE9e russe"
+    parcours: 3
+    ordre: 2
+    lien: null
+    correction: null
+    explications: ''
+- model: API.sujet
+  pk: 7
+  fields:
+    nom: "V\xE9rifier un tri topologique"
+    parcours: 1
+    ordre: 3
+    lien: null
+    correction: null
+    explications: "Notions : Tri topologique\r\nR\xE9sum\xE9 : On donne un graphe
+      orient\xE9 et un tri des noeuds. D\xE9terminer si ce tri est un tri topologique."
+- model: API.sujet
+  pk: 8
+  fields:
+    nom: Manipulation de classeur
+    parcours: 2
+    ordre: 3
+    lien: null
+    correction: null
+    explications: "Notions : pile\r\nR\xE9sum\xE9 :"
+- model: API.sujet
+  pk: 9
+  fields:
+    nom: "Compte \xE0 rebours"
+    parcours: 3
+    ordre: 3
+    lien: null
+    correction: null
+    explications: ''
+- model: API.sujet
+  pk: 10
+  fields:
+    nom: Pacman
+    parcours: 1
+    ordre: 4
+    lien: null
+    correction: null
+    explications: "Notions : BFS, plus court chemin\r\nR\xE9sum\xE9 : On donne une
+      grille de cases libres ou occup\xE9es. D\xE9terminer le plus court chemin d'une
+      case \xE0 une autre sans passer par des obstacles (ce chemin peut traverser
+      un bord pour continuer sur le bord oppos\xE9)."
+- model: API.sujet
+  pk: 11
+  fields:
+    nom: Nombreuses photos
+    parcours: 2
+    ordre: 4
+    lien: null
+    correction: null
+    explications: ''
+- model: API.sujet
+  pk: 12
+  fields:
+    nom: Peindre le motif
+    parcours: 3
+    ordre: 4
+    lien: null
+    correction: null
+    explications: ''
+- model: API.sujet
+  pk: 13
+  fields:
+    nom: "Descente \xE0 skis"
+    parcours: 1
+    ordre: 5
+    lien: null
+    correction: null
+    explications: "Notions : Algorithmes dynamiques\r\nR\xE9sum\xE9 : On donne un
+      DAG. Trouver le plus long chemin (nombre d'arcs emprunt\xE9s) d'un noeud \xE0
+      un autre."
+- model: API.sujet
+  pk: 14
+  fields:
+    nom: "S\xE9quence de billes"
+    parcours: 2
+    ordre: 5
+    lien: null
+    correction: null
+    explications: ''
+- model: API.sujet
+  pk: 15
+  fields:
+    nom: "Nombre encadr\xE9"
+    parcours: 3
+    ordre: 5
+    lien: null
+    correction: null
+    explications: ''

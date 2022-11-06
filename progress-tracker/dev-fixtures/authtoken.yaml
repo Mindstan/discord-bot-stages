@@ -1,0 +1,5 @@
+- model: authtoken.token
+  pk: 8a0ec43c6d006377d6d9460fab9b26416c877edb
+  fields:
+    user: 2
+    created: 2022-11-06 11:27:25.685285+00:00

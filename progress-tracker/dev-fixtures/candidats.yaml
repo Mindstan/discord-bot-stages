@@ -1,0 +1,9 @@
+- model: API.candidat
+  pk: 1
+  fields:
+    prenom: "G\xE9rard"
+    nom: Nivokat
+    annee_bac: 2021
+    login: test_user
+    discord_name: "g\xE9rard"
+    sujet: 2

@@ -1,0 +1,52 @@
+- model: auth.user
+  pk: 1
+  fields:
+    # admin
+    password: pbkdf2_sha256$150000$R5hlVF9y3Jmp$Kid/gAdDx8Tozk1Tz+L6Iil4DfM8LM/JZJzkD9JF3e8=
+    last_login: null
+    is_superuser: true
+    username: admin
+    first_name: ''
+    last_name: ''
+    email: ''
+    is_staff: true
+    is_active: true
+    date_joined: 2022-11-06 11:18:41.438628+00:00
+    groups: []
+    user_permissions: []
+- model: auth.user
+  pk: 2
+  fields:
+    # coachfranceioi
+    password: pbkdf2_sha256$150000$EtRWYhgofqLh$N34bL1tsxIrDcN6AO27b0h3o+N1AuCbSGJtfGxvfCcM=
+    last_login: null
+    is_superuser: false
+    username: coach
+    first_name: ''
+    last_name: ''
+    email: ''
+    is_staff: false
+    is_active: true
+    date_joined: 2022-11-06 11:24:11+00:00
+    groups: []
+    user_permissions:
+    - 33
+    - 34
+    - 35
+    - 36
+    - 37
+    - 38
+    - 39
+    - 40
+    - 49
+    - 50
+    - 51
+    - 52
+    - 45
+    - 46
+    - 47
+    - 48
+    - 41
+    - 42
+    - 43
+    - 44

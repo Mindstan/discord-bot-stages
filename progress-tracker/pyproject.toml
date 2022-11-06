@@ -32,7 +32,10 @@ poethepoet = "^0.16.4"
 [tool.poe.tasks]
 migrate = "python manage.py migrate"
 collectstatic = "python manage.py collectstatic"
-seed-db = [{ ref = "migrate" }, { cmd = "python manage.py " }]
+seed-db = [
+    { ref = "migrate" },
+    { shell = "python manage.py loaddata $(ls dev-fixtures | xargs)" },
+]
 dev-server = [
     { ref = "migrate" },
     { ref = "collectstatic" },

@@ -1,0 +1,15 @@
+- model: API.parcours
+  pk: 1
+  fields:
+    nom: "S\xE9rie de sujets papier : graphes"
+    code: G
+- model: API.parcours
+  pk: 2
+  fields:
+    nom: "S\xE9rie de sujets papier : structures"
+    code: S
+- model: API.parcours
+  pk: 3
+  fields:
+    nom: "Sujets papier R\xE9cursivit\xE9"
+    code: R
