@@ -1,15 +1,12 @@
 FROM python:3.7-buster
 
-RUN mkdir -p /var/www && chown -R www-data:www-data /var/www
-
-COPY requirements.txt requirements.txt
-RUN pip install -r requirements.txt
+#RUN apt-get update && apt-get install -y gunicorn3
+RUN curl -sSL https://install.python-poetry.org | python3 -
+ENV PATH="/root/.local/bin:$PATH"
 COPY . /application
-RUN chown -R www-data:www-data /application
 WORKDIR /application
+RUN poetry install
 
-
-USER www-data
 EXPOSE 80:80
 
 CMD ["/bin/sh", "start.sh"]
