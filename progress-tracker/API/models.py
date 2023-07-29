@@ -1,5 +1,6 @@
 from django.db import models
 
+
 class Parcours(models.Model):
    nom = models.CharField(max_length=256)
    code = models.CharField(max_length=256)

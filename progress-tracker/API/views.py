@@ -1,14 +1,16 @@
-import base64, os
-
-from django.shortcuts import render
-from django.http import HttpResponse
+import base64
+import os
 
 import django_filters.rest_framework
-from rest_framework.permissions import IsAuthenticated
+from django.http import HttpResponse
+from django.shortcuts import render
 from rest_framework import viewsets
-from .serializers import *
-from .models import *
-from rest_framework import generics
+from rest_framework.permissions import IsAuthenticated
+
+from .models import Candidat, Parcours, Recherche, Stage, Sujet
+from .serializers import (CandidatSerializer, ParcoursSerializer,
+                          RechercheSerializer, StageSerializer,
+                          SujetSerializer)
 
 
 def index(request):
