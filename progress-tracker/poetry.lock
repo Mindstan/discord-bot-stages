@@ -115,17 +115,17 @@ graph = ["objgraph (>=1.7.2)"]
 
 [[package]]
 name = "django"
-version = "3.0.14"
+version = "3.1.14"
 description = "A high-level Python Web framework that encourages rapid development and clean, pragmatic design."
 optional = false
 python-versions = ">=3.6"
 files = [
-    {file = "Django-3.0.14-py3-none-any.whl", hash = "sha256:9bc7aa619ed878fedba62ce139abe663a147dccfd20e907725ec11e02a1ca225"},
-    {file = "Django-3.0.14.tar.gz", hash = "sha256:d58d8394036db75a81896037d757357e79406e8f68816c3e8a28721c1d9d4c11"},
+    {file = "Django-3.1.14-py3-none-any.whl", hash = "sha256:0fabc786489af16ad87a8c170ba9d42bfd23f7b699bd5ef05675864e8d012859"},
+    {file = "Django-3.1.14.tar.gz", hash = "sha256:72a4a5a136a214c39cf016ccdd6b69e2aa08c7479c66d93f3a9b5e4bb9d8a347"},
 ]
 
 [package.dependencies]
-asgiref = ">=3.2,<4.0"
+asgiref = ">=3.2.10,<4"
 pytz = "*"
 sqlparse = ">=0.2.2"
 
@@ -733,4 +733,4 @@ testing = ["big-O", "flake8 (<5)", "jaraco.functools", "jaraco.itertools", "more
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.7.2"
-content-hash = "7249db8d43b5eeabd9cf16f5fc9aec426ee5a86b007d38b024c3a8f06aabcc02"
+content-hash = "9a21c536f319f45c7cfa2b3ab6b4679e4b62c71d25c4f407e6cc25054e999150"
